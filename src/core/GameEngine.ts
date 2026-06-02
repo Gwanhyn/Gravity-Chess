@@ -47,9 +47,11 @@ export class GameEngine {
   };
   history: EngineSnapshot[] = [];
   moves: MoveRecord[] = [];
+  logEntries: MoveRecord[] = [];
   replayFrames: ReplayFrame[] = [];
 
   private moveSequence = 0;
+  private logSequence = 0;
 
   constructor(settings: Partial<GameSettings> = {}) {
     this.settings = normalizeSettings({ ...DEFAULT_SETTINGS, ...settings });
@@ -80,7 +82,10 @@ export class GameEngine {
     };
     this.history = [];
     this.moves = [];
+    this.logEntries = [];
     this.moveSequence = 0;
+    this.logSequence = 0;
+    this.appendLog('reset', undefined, '开局');
     this.replayFrames = [this.createReplayFrame('开局')];
   }
 
@@ -237,6 +242,7 @@ export class GameEngine {
     const snapshot = this.history.pop();
     if (!snapshot) return false;
     this.restoreSnapshot(snapshot);
+    this.appendLog('undo', undefined, '悔棋');
     this.replayFrames.push(this.createReplayFrame('悔棋'));
     return true;
   }
@@ -332,6 +338,11 @@ export class GameEngine {
         position: move.position ? { ...move.position } : undefined,
         removed: move.removed?.map((cell) => ({ ...cell }))
       })),
+      logEntries: this.logEntries.map((entry) => ({
+        ...entry,
+        position: entry.position ? { ...entry.position } : undefined,
+        removed: entry.removed?.map((cell) => ({ ...cell }))
+      })),
       replayFrames: this.replayFrames.map((frame) => ({
         ...frame,
         matrix: frame.matrix.map((row) => [...row]),
@@ -359,6 +370,11 @@ export class GameEngine {
       position: move.position ? { ...move.position } : undefined,
       removed: move.removed?.map((cell) => ({ ...cell }))
     }));
+    this.logEntries = state.logEntries.map((entry) => ({
+      ...entry,
+      position: entry.position ? { ...entry.position } : undefined,
+      removed: entry.removed?.map((cell) => ({ ...cell }))
+    }));
     this.replayFrames = state.replayFrames.map((frame) => ({
       ...frame,
       matrix: frame.matrix.map((row) => [...row]),
@@ -366,6 +382,11 @@ export class GameEngine {
     }));
     this.history = [];
     this.moveSequence = this.moves.reduce((max, move) => Math.max(max, move.id), 0);
+    this.logSequence = this.logEntries.reduce((max, entry) => Math.max(max, entry.id), 0);
+  }
+
+  appendExternalLog(kind: MoveKind, label: string, player?: Player): void {
+    this.appendLog(kind, player, label);
   }
 
   private finishAction(win: WinResult | null, preferredPlayer: Player, advanceTurn: boolean): void {
@@ -471,8 +492,27 @@ export class GameEngine {
     position?: Position,
     removed?: Position[]
   ): void {
-    this.moves.push({
+    const move = {
       id: ++this.moveSequence,
+      kind,
+      player,
+      label,
+      position: position ? { ...position } : undefined,
+      removed: removed?.map((cell) => ({ ...cell }))
+    };
+    this.moves.push(move);
+    this.appendLog(kind, player, label, position, removed);
+  }
+
+  private appendLog(
+    kind: MoveKind,
+    player: Player | undefined,
+    label: string,
+    position?: Position,
+    removed?: Position[]
+  ): void {
+    this.logEntries.push({
+      id: ++this.logSequence,
       kind,
       player,
       label,

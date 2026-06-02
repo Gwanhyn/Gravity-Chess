@@ -22,6 +22,7 @@ import {
   DEFAULT_SETTINGS,
   type ActionMode,
   type GameSettings,
+  type MoveKind,
   type MoveOutcome,
   type Player,
   type ReplayFrame
@@ -509,14 +510,30 @@ function renderSummary(): void {
 }
 
 function renderMoves(): void {
-  moveCount.textContent = String(engine.moves.length);
-  const recent = engine.moves.slice(-12).reverse();
+  moveCount.textContent = String(engine.logEntries.length);
+  const recent = engine.logEntries.slice(-80).reverse();
   moveList.innerHTML = recent
-    .map((move) => {
-      const marker = move.player === 1 ? 'red-dot' : 'gold-dot';
-      return `<li><span class="${marker}"></span><strong>${move.id}</strong>${move.label}</li>`;
+    .map((entry) => {
+      const marker = entry.player === 1 ? 'red-dot' : entry.player === 2 ? 'gold-dot' : 'neutral-dot';
+      return `<li><span class="${marker}"></span><strong>${logKindLabel(entry.kind)}</strong>${entry.label}</li>`;
     })
     .join('');
+}
+
+function logKindLabel(kind: MoveKind): string {
+  const labels: Record<MoveKind, string> = {
+    drop: 'drop',
+    bomb: 'bomb',
+    flip: 'flip',
+    check: 'check',
+    undo: 'undo',
+    'undo-request': 'ask',
+    'undo-accept': 'ok',
+    'undo-decline': 'no',
+    reset: 'init',
+    timeout: 'time'
+  };
+  return labels[kind];
 }
 
 function updateOnlineUI(): void {
@@ -532,7 +549,7 @@ function updateOnlineUI(): void {
   }
 
   const roleLabel = roleToLabel(onlineRoom.role);
-  onlineRoleBadge.textContent = onlineRoom.isHost ? `${roleLabel} 房主` : roleLabel;
+  onlineRoleBadge.textContent = onlineRoom.isHost ? `${roleLabel} · 房主` : roleLabel;
   onlineStatus.textContent = `房间 ${onlineRoom.roomCode} | 红方 ${onlineRoom.players.red ? '在线' : '空位'} | 金方 ${
     onlineRoom.players.gold ? '在线' : '空位'
   } | 观战 ${onlineRoom.players.spectators}`;

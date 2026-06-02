@@ -7,7 +7,17 @@ export type GameStatus = 'playing' | 'won' | 'draw';
 export type ActionMode = 'drop' | 'bomb';
 export type MatchMode = 'local' | 'ai';
 export type AiDifficulty = 'easy' | 'medium' | 'hard';
-export type MoveKind = 'drop' | 'bomb' | 'flip' | 'check' | 'timeout';
+export type MoveKind =
+  | 'drop'
+  | 'bomb'
+  | 'flip'
+  | 'check'
+  | 'undo'
+  | 'undo-request'
+  | 'undo-accept'
+  | 'undo-decline'
+  | 'reset'
+  | 'timeout';
 
 export interface Position {
   row: number;
@@ -50,7 +60,7 @@ export interface BombResult {
 export interface MoveRecord {
   id: number;
   kind: MoveKind;
-  player: Player;
+  player?: Player;
   label: string;
   position?: Position;
   removed?: Position[];
@@ -83,6 +93,7 @@ export interface SerializedGameState {
   turnRemaining: number;
   totalRemaining: Record<Player, number>;
   moves: MoveRecord[];
+  logEntries: MoveRecord[];
   replayFrames: ReplayFrame[];
   historyDepth: number;
 }

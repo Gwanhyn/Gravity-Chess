@@ -60,7 +60,7 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(260px, 310px) minmax(360px, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(330px, 380px) minmax(360px, 1fr) minmax(230px, 270px);
   gap: 14px;
   height: 100vh;
   padding: 14px;
@@ -207,7 +207,7 @@ button svg {
 
 .action-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -257,7 +257,7 @@ button svg {
 .move-log {
   display: flex;
   flex: 1;
-  min-height: 145px;
+  min-height: 0;
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
@@ -294,18 +294,20 @@ button svg {
   gap: 6px;
   margin: 0;
   padding: 0;
+  min-height: 0;
   overflow: auto;
   list-style: none;
 }
 
 .move-log li {
   display: grid;
-  grid-template-columns: 12px 30px 1fr;
+  grid-template-columns: 12px 38px 1fr;
   gap: 8px;
   align-items: center;
   min-height: 28px;
   color: #334155;
   font-size: 0.86rem;
+  line-height: 1.35;
 }
 
 .move-log strong {
@@ -314,7 +316,8 @@ button svg {
 }
 
 .red-dot,
-.gold-dot {
+.gold-dot,
+.neutral-dot {
   width: 10px;
   height: 10px;
   border-radius: 999px;
@@ -323,6 +326,10 @@ button svg {
 
 .gold-dot {
   background: var(--gold);
+}
+
+.neutral-dot {
+  background: #94a3b8;
 }
 
 .board-stage {
@@ -446,6 +453,20 @@ canvas {
   font-weight: 800;
 }
 
+.field-grid label span,
+.select-field span,
+.range-field span,
+.toggle-row span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.select-field input,
+.select-field select {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .field-grid label {
   flex-direction: column;
   align-items: stretch;
@@ -562,6 +583,16 @@ button:focus-visible {
   font-size: 0.82rem;
   font-weight: 750;
   overflow-wrap: anywhere;
+}
+
+#onlineRoleBadge {
+  width: auto;
+  min-width: 88px;
+  padding: 0 10px;
+  color: #ffffff;
+  background: linear-gradient(145deg, #11a99b, #0f766e);
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .room-code-input {

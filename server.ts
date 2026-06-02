@@ -169,6 +169,7 @@ function applyAction(room: Room, socket: GameSocket, role: Player, action: Onlin
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       requester: role
     };
+    room.engine.appendExternalLog('undo-request', `${room.engine.getPlayerName(role)}请求悔棋`, role);
     return { ok: true, message: `${room.engine.getPlayerName(role)}请求悔棋` };
   }
 
@@ -181,6 +182,7 @@ function applyAction(room: Room, socket: GameSocket, role: Player, action: Onlin
       return { ok: false, message: '只有对方可以同意悔棋' };
     }
 
+    room.engine.appendExternalLog('undo-accept', `${room.engine.getPlayerName(role)}同意悔棋`, role);
     const undone = room.engine.undo();
     room.pendingUndoRequest = null;
     return { ok: undone, message: undone ? '对方已同意悔棋' : '没有可悔棋的步骤' };
@@ -196,6 +198,7 @@ function applyAction(room: Room, socket: GameSocket, role: Player, action: Onlin
     }
 
     room.pendingUndoRequest = null;
+    room.engine.appendExternalLog('undo-decline', `${room.engine.getPlayerName(role)}拒绝悔棋`, role);
     return { ok: true, message: role === request.requester ? '已取消悔棋请求' : '对方拒绝悔棋' };
   }
 
