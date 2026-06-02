@@ -4,7 +4,7 @@
 
 :root {
   color-scheme: light;
-  --board-aspect: 5 / 7;
+  --board-aspect: 7 / 5;
   --text: #182033;
   --muted: #647084;
   --line: #d8e0ea;
@@ -194,7 +194,7 @@ button svg {
 
 .action-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 

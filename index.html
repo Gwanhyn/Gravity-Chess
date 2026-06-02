@@ -46,6 +46,10 @@
             <i data-lucide="circle-dot"></i>
             <span>落子</span>
           </button>
+          <button id="checkWinBtn" class="mode-btn" type="button" title="手动获胜检查">
+            <i data-lucide="badge-check"></i>
+            <span>查胜</span>
+          </button>
           <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹棋子">
             <i data-lucide="bomb"></i>
             <span>炸弹</span>
@@ -96,11 +100,11 @@
           <div class="field-grid">
             <label>
               <span>行</span>
-              <input id="rowsInput" type="number" min="4" max="12" value="7" />
+              <input id="rowsInput" type="number" min="4" max="12" value="5" />
             </label>
             <label>
               <span>列</span>
-              <input id="colsInput" type="number" min="4" max="12" value="5" />
+              <input id="colsInput" type="number" min="4" max="12" value="7" />
             </label>
             <label>
               <span>连珠</span>
@@ -124,6 +128,10 @@
           <label class="toggle-row">
             <span>上下联通</span>
             <input id="wrapVerticalInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>自动查胜</span>
+            <input id="autoWinCheckInput" type="checkbox" checked />
           </label>
           <label class="toggle-row">
             <span>随机障碍</span>

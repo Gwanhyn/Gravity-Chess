@@ -1,4 +1,15 @@
-import { ArrowDown, ArrowDownUp, ArrowUp, Bomb, CircleDot, createIcons, Play, RefreshCw, Undo2 } from 'lucide';
+import {
+  ArrowDown,
+  ArrowDownUp,
+  ArrowUp,
+  BadgeCheck,
+  Bomb,
+  CircleDot,
+  createIcons,
+  Play,
+  RefreshCw,
+  Undo2
+} from 'lucide';
 import './style.css';
 import { GameEngine } from './core/GameEngine';
 import { DEFAULT_SETTINGS, type ActionMode, type GameSettings, type Player, type ReplayFrame } from './core/types';
@@ -36,6 +47,7 @@ const winInput = query<HTMLInputElement>('#winInput');
 const obstacleCountInput = query<HTMLInputElement>('#obstacleCountInput');
 const wrapHorizontalInput = query<HTMLInputElement>('#wrapHorizontalInput');
 const wrapVerticalInput = query<HTMLInputElement>('#wrapVerticalInput');
+const autoWinCheckInput = query<HTMLInputElement>('#autoWinCheckInput');
 const obstaclesInput = query<HTMLInputElement>('#obstaclesInput');
 const bombsInput = query<HTMLInputElement>('#bombsInput');
 const gravityFlipInput = query<HTMLInputElement>('#gravityFlipInput');
@@ -49,6 +61,7 @@ const totalMinutesInput = query<HTMLInputElement>('#totalMinutesInput');
 const totalMinutesOutput = query<HTMLOutputElement>('#totalMinutesOutput');
 
 const dropModeBtn = query<HTMLButtonElement>('#dropModeBtn');
+const checkWinBtn = query<HTMLButtonElement>('#checkWinBtn');
 const bombModeBtn = query<HTMLButtonElement>('#bombModeBtn');
 const flipBtn = query<HTMLButtonElement>('#flipBtn');
 const undoBtn = query<HTMLButtonElement>('#undoBtn');
@@ -59,6 +72,7 @@ const lucideIcons = {
   ArrowDown,
   ArrowUp,
   ArrowDownUp,
+  BadgeCheck,
   Bomb,
   CircleDot,
   Play,
@@ -99,6 +113,11 @@ function wireEvents(): void {
       selectedMode = 'bomb';
       updateUI();
     }
+  });
+
+  checkWinBtn.addEventListener('click', async () => {
+    if (inputLocked || replaying || isAiTurn()) return;
+    await performManualCheck();
   });
 
   flipBtn.addEventListener('click', async () => {
@@ -150,6 +169,16 @@ async function performColumnAction(col: number): Promise<void> {
 
 async function performFlip(): Promise<void> {
   const outcome = engine.flipGravity();
+  if (!outcome.ok) {
+    updateUI(outcome.message);
+    return;
+  }
+
+  await playOutcome(outcome);
+}
+
+async function performManualCheck(): Promise<void> {
+  const outcome = engine.checkWinManually();
   if (!outcome.ok) {
     updateUI(outcome.message);
     return;
@@ -278,6 +307,8 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
     statusText.textContent = '平局';
   } else if (aiPending) {
     statusText.textContent = 'AI 思考中';
+  } else if (!engine.settings.autoWinCheckEnabled && engine.manualClaimPlayer) {
+    statusText.textContent = `${engine.getPlayerName(currentPlayer)}行动，可先验${engine.getPlayerName(engine.manualClaimPlayer)}`;
   } else {
     statusText.textContent = `${engine.getPlayerName(currentPlayer)}行动`;
   }
@@ -288,6 +319,20 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
 
   dropModeBtn.classList.toggle('active', selectedMode === 'drop');
   bombModeBtn.classList.toggle('active', selectedMode === 'bomb');
+  const checkLabel = checkWinBtn.querySelector('span');
+  const checkPlayer = engine.manualClaimPlayer ?? currentPlayer;
+  if (checkLabel) {
+    checkLabel.textContent = engine.manualClaimPlayer
+      ? `验${engine.getPlayerName(checkPlayer).slice(0, 1)}`
+      : '查胜';
+  }
+  checkWinBtn.title = `检查${engine.getPlayerName(checkPlayer)}是否获胜`;
+  checkWinBtn.disabled =
+    engine.settings.autoWinCheckEnabled ||
+    inputLocked ||
+    replaying ||
+    (isAiTurn() && !engine.manualClaimPlayer) ||
+    status !== 'playing';
   bombModeBtn.disabled = !canUseBomb(currentPlayer) || inputLocked || replaying || isAiTurn();
   flipBtn.disabled = !canUseFlip(currentPlayer) || inputLocked || replaying || isAiTurn() || status !== 'playing';
   undoBtn.disabled = inputLocked || replaying || engine.history.length === 0;
@@ -310,7 +355,8 @@ function renderSummary(): void {
   const badges = [
     engine.settings.matchMode === 'ai' ? `AI ${difficultyLabel(engine.settings.aiDifficulty)}` : '本地双人',
     `${engine.board.rows}x${engine.board.cols}`,
-    `${engine.board.winLength} 连珠`
+    `${engine.board.winLength} 连珠`,
+    engine.settings.autoWinCheckEnabled ? '自动查胜' : '手动查胜'
   ];
   if (engine.settings.wrapHorizontal) badges.push('左右联通');
   if (engine.settings.wrapVertical) badges.push('上下联通');
@@ -340,6 +386,7 @@ function readSettings(): GameSettings {
     obstacleCount: readNumber(obstacleCountInput, DEFAULT_SETTINGS.obstacleCount),
     wrapHorizontal: wrapHorizontalInput.checked,
     wrapVertical: wrapVerticalInput.checked,
+    autoWinCheckEnabled: autoWinCheckInput.checked,
     obstaclesEnabled: obstaclesInput.checked,
     bombsEnabled: bombsInput.checked,
     gravityFlipEnabled: gravityFlipInput.checked,
@@ -360,6 +407,7 @@ function syncSettingsToForm(settings: GameSettings): void {
   obstacleCountInput.value = String(settings.obstacleCount);
   wrapHorizontalInput.checked = settings.wrapHorizontal;
   wrapVerticalInput.checked = settings.wrapVertical;
+  autoWinCheckInput.checked = settings.autoWinCheckEnabled;
   obstaclesInput.checked = settings.obstaclesEnabled;
   bombsInput.checked = settings.bombsEnabled;
   gravityFlipInput.checked = settings.gravityFlipEnabled;

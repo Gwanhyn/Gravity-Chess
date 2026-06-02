@@ -7,7 +7,7 @@ export type GameStatus = 'playing' | 'won' | 'draw';
 export type ActionMode = 'drop' | 'bomb';
 export type MatchMode = 'local' | 'ai';
 export type AiDifficulty = 'easy' | 'medium' | 'hard';
-export type MoveKind = 'drop' | 'bomb' | 'flip' | 'timeout';
+export type MoveKind = 'drop' | 'bomb' | 'flip' | 'check' | 'timeout';
 
 export interface Position {
   row: number;
@@ -25,6 +25,7 @@ export interface BoardOptions {
 }
 
 export interface GameSettings extends BoardOptions {
+  autoWinCheckEnabled: boolean;
   bombsEnabled: boolean;
   gravityFlipEnabled: boolean;
   matchMode: MatchMode;
@@ -62,6 +63,7 @@ export interface EngineSnapshot {
   winner: Player | null;
   winLine: Position[];
   gravity: GravityDirection;
+  manualClaimPlayer: Player | null;
   bombsLeft: Record<Player, number>;
   flipsLeft: Record<Player, number>;
   turnRemaining: number;
@@ -90,13 +92,14 @@ export interface MoveOutcome {
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
-  rows: 7,
-  cols: 5,
+  rows: 5,
+  cols: 7,
   winLength: 4,
   wrapHorizontal: false,
   wrapVertical: false,
   obstaclesEnabled: false,
   obstacleCount: 2,
+  autoWinCheckEnabled: true,
   bombsEnabled: false,
   gravityFlipEnabled: false,
   matchMode: 'local',

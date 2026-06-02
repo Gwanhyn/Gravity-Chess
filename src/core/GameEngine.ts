@@ -37,6 +37,7 @@ export class GameEngine {
   winner: Player | null = null;
   winLine: Position[] = [];
   gravity: GravityDirection = 'down';
+  manualClaimPlayer: Player | null = null;
   bombsLeft: Record<Player, number> = { 1: 0, 2: 0 };
   flipsLeft: Record<Player, number> = { 1: 0, 2: 0 };
   turnRemaining = DEFAULT_SETTINGS.turnSeconds;
@@ -64,6 +65,7 @@ export class GameEngine {
     this.winner = null;
     this.winLine = [];
     this.gravity = 'down';
+    this.manualClaimPlayer = null;
     this.bombsLeft = {
       1: this.settings.bombsEnabled ? 1 : 0,
       2: this.settings.bombsEnabled ? 1 : 0
@@ -109,10 +111,10 @@ export class GameEngine {
       return { ok: false, message: '该列无法落子' };
     }
 
-    const win = this.board.checkWin(position.row, position.col);
+    const win = this.settings.autoWinCheckEnabled ? this.board.checkWin(position.row, position.col) : null;
     const label = `${PLAYER_NAMES[player]} 落子 ${col + 1}`;
     this.recordMove('drop', player, label, position);
-    this.finishAction(win, player);
+    this.finishAction(win, player, true);
     this.replayFrames.push(this.createReplayFrame(label));
 
     return {
@@ -143,10 +145,10 @@ export class GameEngine {
     }
 
     this.bombsLeft[player] -= 1;
-    const win = this.board.scanForWinner(player);
+    const win = this.settings.autoWinCheckEnabled ? this.board.scanForWinner(player) : null;
     const label = `${PLAYER_NAMES[player]} 炸弹 ${col + 1}`;
     this.recordMove('bomb', player, label, result.center, result.removed);
-    this.finishAction(win, player);
+    this.finishAction(win, player, true);
     this.replayFrames.push(this.createReplayFrame(label));
 
     return {
@@ -169,14 +171,14 @@ export class GameEngine {
 
     const player = this.currentPlayer;
     this.pushHistory();
-    this.gravity = this.gravity === 'down' ? 'up' : 'down';
+    this.gravity = 'down';
     this.board.flipGravity(this.gravity);
     this.flipsLeft[player] -= 1;
 
-    const win = this.board.scanForWinner(player);
+    const win = this.settings.autoWinCheckEnabled ? this.board.scanForWinner(player) : null;
     const label = `${PLAYER_NAMES[player]} 反转`;
     this.recordMove('flip', player, label);
-    this.finishAction(win, player);
+    this.finishAction(win, player, true);
     this.replayFrames.push(this.createReplayFrame(label));
 
     return {
@@ -184,6 +186,54 @@ export class GameEngine {
       kind: 'flip',
       player,
       win
+    };
+  }
+
+  checkWinManually(): MoveOutcome {
+    if (this.status !== 'playing') {
+      return { ok: false, message: '对局已结束' };
+    }
+    if (this.settings.autoWinCheckEnabled) {
+      return { ok: false, message: '自动查胜已开启' };
+    }
+
+    const player = this.manualClaimPlayer ?? this.currentPlayer;
+    const wasPendingClaim = this.manualClaimPlayer !== null;
+    this.pushHistory();
+    const win = this.board.scanPlayerWinner(player);
+    const label = win ? `${PLAYER_NAMES[player]} 查胜成功` : `${PLAYER_NAMES[player]} 查胜未中`;
+    this.recordMove('check', player, label);
+
+    if (win) {
+      this.status = 'won';
+      this.winner = player;
+      this.winLine = win.line;
+      this.manualClaimPlayer = null;
+      this.replayFrames.push(this.createReplayFrame(label));
+      return {
+        ok: true,
+        kind: 'check',
+        player,
+        win
+      };
+    }
+
+    this.manualClaimPlayer = null;
+    if (this.board.isDraw(this.gravity)) {
+      this.status = 'draw';
+      this.winner = null;
+      this.winLine = [];
+    } else if (!wasPendingClaim) {
+      this.currentPlayer = otherPlayer(this.currentPlayer);
+      this.turnRemaining = this.settings.turnSeconds;
+    }
+    this.replayFrames.push(this.createReplayFrame(label));
+    return {
+      ok: true,
+      kind: 'check',
+      player,
+      win: null,
+      message: '未发现连珠，检查计为一步'
     };
   }
 
@@ -268,7 +318,7 @@ export class GameEngine {
     return PLAYER_NAMES[player];
   }
 
-  private finishAction(win: WinResult | null, preferredPlayer: Player): void {
+  private finishAction(win: WinResult | null, preferredPlayer: Player, advanceTurn: boolean): void {
     if (win) {
       this.status = 'won';
       this.winner = win.player;
@@ -276,12 +326,14 @@ export class GameEngine {
       return;
     }
 
-    const boardWideWin = this.board.scanForWinner(preferredPlayer);
-    if (boardWideWin) {
-      this.status = 'won';
-      this.winner = boardWideWin.player;
-      this.winLine = boardWideWin.line;
-      return;
+    if (this.settings.autoWinCheckEnabled) {
+      const boardWideWin = this.board.scanForWinner(preferredPlayer);
+      if (boardWideWin) {
+        this.status = 'won';
+        this.winner = boardWideWin.player;
+        this.winLine = boardWideWin.line;
+        return;
+      }
     }
 
     if (this.board.isDraw(this.gravity)) {
@@ -291,6 +343,9 @@ export class GameEngine {
       return;
     }
 
+    if (!advanceTurn) return;
+
+    this.manualClaimPlayer = this.settings.autoWinCheckEnabled ? null : this.currentPlayer;
     this.currentPlayer = otherPlayer(this.currentPlayer);
     this.turnRemaining = this.settings.turnSeconds;
   }
@@ -301,6 +356,7 @@ export class GameEngine {
     const label = `${PLAYER_NAMES[player]} 超时`;
     this.recordMove('timeout', player, label);
     this.currentPlayer = otherPlayer(player);
+    this.manualClaimPlayer = null;
     this.turnRemaining = this.settings.turnSeconds;
     this.replayFrames.push(this.createReplayFrame(label));
   }
@@ -317,6 +373,7 @@ export class GameEngine {
       winner: this.winner,
       winLine: this.winLine.map((cell) => ({ ...cell })),
       gravity: this.gravity,
+      manualClaimPlayer: this.manualClaimPlayer,
       bombsLeft: { ...this.bombsLeft },
       flipsLeft: { ...this.flipsLeft },
       turnRemaining: this.turnRemaining,
@@ -336,6 +393,7 @@ export class GameEngine {
     this.winner = snapshot.winner;
     this.winLine = snapshot.winLine.map((cell) => ({ ...cell }));
     this.gravity = snapshot.gravity;
+    this.manualClaimPlayer = snapshot.manualClaimPlayer;
     this.bombsLeft = { ...snapshot.bombsLeft };
     this.flipsLeft = { ...snapshot.flipsLeft };
     this.turnRemaining = snapshot.turnRemaining;

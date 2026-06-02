@@ -123,6 +123,7 @@ export class Board {
   }
 
   flipGravity(nextGravity: GravityDirection): void {
+    this.matrix.reverse();
     this.settlePieces(nextGravity);
   }
 
@@ -176,6 +177,17 @@ export class Board {
           const win = this.checkWin(row, col);
           if (win?.player === player) return win;
         }
+      }
+    }
+    return null;
+  }
+
+  scanPlayerWinner(player: Player): WinResult | null {
+    for (let row = 0; row < this.rows; row += 1) {
+      for (let col = 0; col < this.cols; col += 1) {
+        if (this.matrix[row][col] !== player) continue;
+        const win = this.checkWin(row, col);
+        if (win?.player === player) return win;
       }
     }
     return null;
