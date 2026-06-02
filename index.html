@@ -222,6 +222,24 @@
         </section>
       </aside>
     </div>
+
+    <div id="undoRequestDialog" class="undo-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="undoRequestTitle">
+      <div class="undo-dialog-card">
+        <p class="eyebrow">Undo Request</p>
+        <h2 id="undoRequestTitle">对方请求悔棋</h2>
+        <p id="undoRequestText" class="undo-request-text">是否同意回退上一步？</p>
+        <div class="undo-request-actions">
+          <button id="undoDeclineBtn" class="text-command muted" type="button">
+            <i data-lucide="x"></i>
+            <span>拒绝</span>
+          </button>
+          <button id="undoAcceptBtn" class="text-command" type="button">
+            <i data-lucide="check"></i>
+            <span>同意</span>
+          </button>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

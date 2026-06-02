@@ -5,15 +5,18 @@
 :root {
   color-scheme: light;
   --board-aspect: 7 / 5;
-  --text: #182033;
-  --muted: #647084;
-  --line: #d8e0ea;
-  --panel: rgba(255, 255, 255, 0.88);
+  --text: #182235;
+  --muted: #66758b;
+  --line: #dce5ef;
+  --panel: rgba(255, 255, 255, 0.9);
+  --panel-solid: #fbfdff;
   --red: #ef476f;
   --gold: #f2b84b;
-  --teal: #13b8a6;
+  --teal: #11a99b;
+  --ink: #24334d;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    "Inter", "Segoe UI Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft YaHei", sans-serif;
 }
 
 * {
@@ -22,17 +25,22 @@
 
 html,
 body {
+  height: 100%;
   min-height: 100%;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  overflow: hidden;
   color: var(--text);
   background:
-    linear-gradient(135deg, rgba(19, 184, 166, 0.16), transparent 32%),
-    linear-gradient(315deg, rgba(239, 71, 111, 0.11), transparent 34%),
+    linear-gradient(115deg, rgba(17, 169, 155, 0.14) 0%, transparent 34%),
+    linear-gradient(240deg, rgba(239, 71, 111, 0.1) 0%, transparent 30%),
+    linear-gradient(180deg, #f8fbff 0%, #eaf1f8 100%),
     #eef3f8;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -54,8 +62,9 @@ button:disabled {
   display: grid;
   grid-template-columns: minmax(260px, 310px) minmax(360px, 1fr) minmax(260px, 320px);
   gap: 14px;
-  min-height: 100vh;
+  height: 100vh;
   padding: 14px;
+  overflow: hidden;
 }
 
 .panel {
@@ -65,15 +74,18 @@ button:disabled {
   min-width: 0;
   padding: 14px;
   overflow: hidden;
-  background: var(--panel);
-  border: 1px solid rgba(126, 143, 166, 0.34);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.84)),
+    var(--panel);
+  border: 1px solid rgba(128, 148, 172, 0.32);
   border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(48, 65, 95, 0.12);
-  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 44px rgba(48, 65, 95, 0.14);
+  backdrop-filter: blur(16px);
 }
 
 .panel-primary {
   justify-content: flex-start;
+  height: calc(100vh - 28px);
 }
 
 .brand {
@@ -89,6 +101,7 @@ button:disabled {
   font-size: clamp(1.6rem, 4vw, 2.25rem);
   line-height: 1;
   letter-spacing: 0;
+  color: var(--ink);
 }
 
 .eyebrow,
@@ -109,7 +122,7 @@ button:disabled {
   height: 42px;
   flex: 0 0 auto;
   color: #ffffff;
-  background: #253047;
+  background: linear-gradient(145deg, #2d3f60, #172237);
   border-radius: 8px;
 }
 
@@ -128,7 +141,7 @@ button svg {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .player-token {
@@ -163,7 +176,7 @@ button svg {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.74);
 }
 
 .timer-card span {
@@ -222,8 +235,8 @@ button svg {
 
 .mode-btn.active {
   color: #ffffff;
-  background: #253047;
-  border-color: #253047;
+  background: linear-gradient(145deg, #2d3f60, #172237);
+  border-color: #24334d;
 }
 
 .command-row {
@@ -317,6 +330,8 @@ button svg {
   grid-template-rows: auto minmax(360px, 1fr);
   gap: 12px;
   min-width: 0;
+  height: calc(100vh - 28px);
+  overflow: hidden;
 }
 
 .board-topline {
@@ -383,8 +398,27 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  padding-bottom: 12px;
+  padding: 0 2px 14px;
   border-bottom: 1px solid rgba(216, 224, 234, 0.82);
+}
+
+.settings-panel {
+  height: calc(100vh - 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(102, 117, 139, 0.4) transparent;
+}
+
+.settings-panel::-webkit-scrollbar,
+.move-log ol::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-panel::-webkit-scrollbar-thumb,
+.move-log ol::-webkit-scrollbar-thumb {
+  background: rgba(102, 117, 139, 0.36);
+  border-radius: 999px;
 }
 
 .settings-panel section:last-child {
@@ -424,7 +458,7 @@ select {
   width: 100%;
   min-height: 38px;
   color: #1f2937;
-  background: #ffffff;
+  background: var(--panel-solid);
   border: 1px solid var(--line);
   border-radius: 8px;
   outline: 0;
@@ -502,7 +536,7 @@ button:focus-visible {
   min-height: 32px;
   padding: 0 12px;
   color: #ffffff;
-  background: #253047;
+  background: linear-gradient(145deg, #2d3f60, #172237);
 }
 
 .text-command.muted {
@@ -542,9 +576,60 @@ button:focus-visible {
   gap: 8px;
 }
 
+.undo-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(24, 34, 53, 0.34);
+  backdrop-filter: blur(8px);
+}
+
+.undo-dialog.hidden {
+  display: none;
+}
+
+.undo-dialog-card {
+  width: min(360px, 100%);
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid rgba(128, 148, 172, 0.34);
+  border-radius: 8px;
+  box-shadow: 0 22px 60px rgba(24, 34, 53, 0.24);
+}
+
+.undo-dialog-card h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.22rem;
+  line-height: 1.25;
+}
+
+.undo-request-text {
+  margin: 10px 0 16px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.undo-request-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 @media (max-width: 1120px) {
+  body {
+    overflow: auto;
+  }
+
   .app-shell {
     grid-template-columns: minmax(240px, 300px) minmax(360px, 1fr);
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .settings-panel {
@@ -552,6 +637,13 @@ button:focus-visible {
     display: grid;
     grid-template-columns: repeat(4, minmax(190px, 1fr));
     align-items: start;
+    height: auto;
+    overflow: visible;
+  }
+
+  .panel-primary,
+  .board-stage {
+    height: auto;
   }
 
   .settings-panel section {

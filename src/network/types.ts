@@ -8,18 +8,24 @@ export interface OnlinePlayers {
   spectators: number;
 }
 
+export interface UndoRequest {
+  id: string;
+  requester: Player;
+}
+
 export interface OnlineRoomState {
   roomCode: string;
   role: OnlineRole;
   isHost: boolean;
   players: OnlinePlayers;
+  pendingUndoRequest: UndoRequest | null;
   state: SerializedGameState;
   message?: string;
   outcome?: MoveOutcome;
 }
 
 export interface OnlineAction {
-  kind: 'drop' | 'check' | 'flip' | 'undo' | 'reset';
+  kind: 'drop' | 'check' | 'flip' | 'undo-request' | 'undo-accept' | 'undo-decline' | 'reset';
   col?: number;
   mode?: ActionMode;
   settings?: GameSettings;

@@ -4,6 +4,7 @@ import {
   ArrowUp,
   BadgeCheck,
   Bomb,
+  Check,
   CircleDot,
   createIcons,
   LogIn,
@@ -11,7 +12,8 @@ import {
   Play,
   RefreshCw,
   Undo2,
-  Wifi
+  Wifi,
+  X
 } from 'lucide';
 import { io, type Socket } from 'socket.io-client';
 import './style.css';
@@ -78,6 +80,11 @@ const hostRoomBtn = query<HTMLButtonElement>('#hostRoomBtn');
 const joinRoomBtn = query<HTMLButtonElement>('#joinRoomBtn');
 const leaveRoomBtn = query<HTMLButtonElement>('#leaveRoomBtn');
 const shareUrl = query<HTMLElement>('#shareUrl');
+const undoRequestDialog = query<HTMLElement>('#undoRequestDialog');
+const undoRequestTitle = query<HTMLElement>('#undoRequestTitle');
+const undoRequestText = query<HTMLElement>('#undoRequestText');
+const undoAcceptBtn = query<HTMLButtonElement>('#undoAcceptBtn');
+const undoDeclineBtn = query<HTMLButtonElement>('#undoDeclineBtn');
 
 const dropModeBtn = query<HTMLButtonElement>('#dropModeBtn');
 const checkWinBtn = query<HTMLButtonElement>('#checkWinBtn');
@@ -93,13 +100,15 @@ const lucideIcons = {
   ArrowDownUp,
   BadgeCheck,
   Bomb,
+  Check,
   CircleDot,
   LogIn,
   LogOut,
   Play,
   RefreshCw,
   Undo2,
-  Wifi
+  Wifi,
+  X
 };
 
 let selectedMode: ActionMode = 'drop';
@@ -153,7 +162,7 @@ function wireEvents(): void {
   undoBtn.addEventListener('click', () => {
     if (inputLocked || replaying) return;
     if (isOnline()) {
-      emitOnlineAction({ kind: 'undo' });
+      emitOnlineAction({ kind: 'undo-request' });
       return;
     }
     if (engine.undo()) {
@@ -175,6 +184,8 @@ function wireEvents(): void {
   hostRoomBtn.addEventListener('click', () => createOnlineRoom());
   joinRoomBtn.addEventListener('click', () => joinOnlineRoom());
   leaveRoomBtn.addEventListener('click', () => leaveOnlineRoom());
+  undoAcceptBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-accept' }));
+  undoDeclineBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-decline' }));
 
   turnSecondsInput.addEventListener('input', () => {
     turnSecondsOutput.value = turnSecondsInput.value;
@@ -314,7 +325,7 @@ function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
 
     const outcome = pendingRemoteOutcome;
     pendingRemoteOutcome = null;
-    if (outcome?.ok && outcome.kind !== 'check') {
+    if (outcome?.ok && outcome.position && outcome.kind !== 'check') {
       inputLocked = true;
       updateUI(payload.message);
       await renderer.animateMove(outcome);
@@ -450,16 +461,24 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
     checkLabel.textContent = '查胜';
   }
   checkWinBtn.title = `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
+  const hasPendingUndo = Boolean(onlineRoom?.pendingUndoRequest);
   checkWinBtn.disabled =
-    engine.settings.autoWinCheckEnabled || inputLocked || replaying || !canActLocally() || status !== 'playing';
-  bombModeBtn.disabled = !canUseBomb(currentPlayer) || inputLocked || replaying || !canActLocally();
-  flipBtn.disabled = !canUseFlip(currentPlayer) || inputLocked || replaying || !canActLocally() || status !== 'playing';
-  undoBtn.disabled = inputLocked || replaying || (!isOnline() && engine.history.length === 0);
+    engine.settings.autoWinCheckEnabled ||
+    inputLocked ||
+    replaying ||
+    hasPendingUndo ||
+    !canActLocally() ||
+    status !== 'playing';
+  bombModeBtn.disabled = !canUseBomb(currentPlayer) || inputLocked || replaying || hasPendingUndo || !canActLocally();
+  flipBtn.disabled =
+    !canUseFlip(currentPlayer) || inputLocked || replaying || hasPendingUndo || !canActLocally() || status !== 'playing';
+  undoBtn.disabled = inputLocked || replaying || hasPendingUndo || !canRequestUndo();
   replayBtn.disabled = inputLocked || replaying || engine.replayFrames.length <= 1;
-  dropModeBtn.disabled = inputLocked || replaying || !canActLocally() || status !== 'playing';
+  dropModeBtn.disabled = inputLocked || replaying || hasPendingUndo || !canActLocally() || status !== 'playing';
   applySettingsBtn.disabled = isOnline() && !onlineRoom?.isHost;
   newGameBtn.disabled = isOnline() && !onlineRoom?.isHost;
   updateOnlineUI();
+  updateUndoRequestUI();
 
   renderSummary();
   renderMoves();
@@ -517,12 +536,27 @@ function updateOnlineUI(): void {
   onlineStatus.textContent = `房间 ${onlineRoom.roomCode} | 红方 ${onlineRoom.players.red ? '在线' : '空位'} | 金方 ${
     onlineRoom.players.gold ? '在线' : '空位'
   } | 观战 ${onlineRoom.players.spectators}`;
+  if (onlineRoom.pendingUndoRequest?.requester === onlineRoom.role) {
+    onlineStatus.textContent = `${onlineStatus.textContent} | 等待对方回应悔棋`;
+  }
   roomCodeInput.value = onlineRoom.roomCode;
   roomCodeInput.disabled = true;
   hostRoomBtn.disabled = true;
   joinRoomBtn.disabled = true;
   leaveRoomBtn.disabled = false;
   shareUrl.textContent = `分享：${window.location.origin}/  房间码：${onlineRoom.roomCode}`;
+}
+
+function updateUndoRequestUI(): void {
+  const request = onlineRoom?.pendingUndoRequest;
+  const shouldRespond = Boolean(request && onlineRoom?.role === otherPlayerLocal(request.requester));
+  undoRequestDialog.classList.toggle('hidden', !shouldRespond);
+
+  if (!request || !shouldRespond) return;
+  undoRequestTitle.textContent = `${roleToLabel(request.requester)}请求悔棋`;
+  undoRequestText.textContent = '同意后棋局会回退上一步，双方棋盘同步更新。';
+  undoAcceptBtn.disabled = inputLocked;
+  undoDeclineBtn.disabled = inputLocked;
 }
 
 function isOnline(): boolean {
@@ -536,10 +570,21 @@ function canActLocally(): boolean {
   return onlineRoom?.role === engine.currentPlayer;
 }
 
+function canRequestUndo(): boolean {
+  if (!isOnline()) {
+    return engine.history.length > 0;
+  }
+  return (onlineRoom?.role === 1 || onlineRoom?.role === 2) && engine.moves.length > 0;
+}
+
 function roleToLabel(role: OnlineRole): string {
   if (role === 1) return '红方';
   if (role === 2) return '金方';
   return '观战';
+}
+
+function otherPlayerLocal(player: Player): Player {
+  return player === 1 ? 2 : 1;
 }
 
 function readSettings(): GameSettings {

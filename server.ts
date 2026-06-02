@@ -6,12 +6,13 @@ import { fileURLToPath } from 'node:url';
 import { Server, type Socket } from 'socket.io';
 import { createServer as createViteServer } from 'vite';
 import { GameEngine } from './src/core/GameEngine';
-import { DEFAULT_SETTINGS, type GameSettings, type MoveOutcome, type Player } from './src/core/types';
+import { DEFAULT_SETTINGS, otherPlayer, type GameSettings, type MoveOutcome, type Player } from './src/core/types';
 import type {
   ClientToServerEvents,
   OnlineAction,
   OnlineRole,
-  ServerToClientEvents
+  ServerToClientEvents,
+  UndoRequest
 } from './src/network/types';
 
 interface Room {
@@ -20,6 +21,7 @@ interface Room {
   sockets: Map<string, OnlineRole>;
   hostId: string;
   lastTick: number;
+  pendingUndoRequest: UndoRequest | null;
 }
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -43,7 +45,10 @@ if (isProd) {
   });
 } else {
   const vite = await createViteServer({
-    server: { middlewareMode: true },
+    server: {
+      middlewareMode: true,
+      hmr: { server: httpServer }
+    },
     appType: 'spa'
   });
   app.use(vite.middlewares);
@@ -60,7 +65,8 @@ io.on('connection', (socket) => {
       engine,
       sockets: new Map([[socket.id, 1]]),
       hostId: socket.id,
-      lastTick: Date.now()
+      lastTick: Date.now(),
+      pendingUndoRequest: null
     };
 
     rooms.set(code, room);
@@ -107,6 +113,7 @@ io.on('connection', (socket) => {
     const outcome = applyAction(room, socket, role, action);
     if (!outcome.ok) {
       socket.emit('room:error', { message: outcome.message ?? '操作失败' });
+      emitRoomState(room);
       return;
     }
 
@@ -142,16 +149,54 @@ function applyAction(room: Room, socket: GameSocket, role: Player, action: Onlin
     if (socket.id !== room.hostId) {
       return { ok: false, message: '只有房主可以重开或应用设置' };
     }
+    room.pendingUndoRequest = null;
     room.engine.reset(forceOnlineSettings(action.settings ?? room.engine.settings));
-    return { ok: true, kind: 'drop', message: '房主已重开' };
+    return { ok: true, message: '房主已重开' };
   }
 
-  if (action.kind === 'undo') {
-    const undone = room.engine.undo();
-    return {
-      ok: undone,
-      message: undone ? '已悔棋' : '没有可悔棋的步骤'
+  if (action.kind === 'undo-request') {
+    if (room.pendingUndoRequest) {
+      return { ok: false, message: '已经有一个悔棋请求在等待回应' };
+    }
+    if (room.engine.history.length === 0) {
+      return { ok: false, message: '没有可悔棋的步骤' };
+    }
+    if (!hasOpponent(room, role)) {
+      return { ok: false, message: '对方不在线，无法请求悔棋' };
+    }
+
+    room.pendingUndoRequest = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      requester: role
     };
+    return { ok: true, message: `${room.engine.getPlayerName(role)}请求悔棋` };
+  }
+
+  if (action.kind === 'undo-accept') {
+    const request = room.pendingUndoRequest;
+    if (!request) {
+      return { ok: false, message: '当前没有悔棋请求' };
+    }
+    if (role !== otherPlayer(request.requester)) {
+      return { ok: false, message: '只有对方可以同意悔棋' };
+    }
+
+    const undone = room.engine.undo();
+    room.pendingUndoRequest = null;
+    return { ok: undone, message: undone ? '对方已同意悔棋' : '没有可悔棋的步骤' };
+  }
+
+  if (action.kind === 'undo-decline') {
+    const request = room.pendingUndoRequest;
+    if (!request) {
+      return { ok: false, message: '当前没有悔棋请求' };
+    }
+    if (role !== otherPlayer(request.requester) && role !== request.requester) {
+      return { ok: false, message: '不能回应这个悔棋请求' };
+    }
+
+    room.pendingUndoRequest = null;
+    return { ok: true, message: role === request.requester ? '已取消悔棋请求' : '对方拒绝悔棋' };
   }
 
   if (room.engine.status !== 'playing') {
@@ -160,6 +205,10 @@ function applyAction(room: Room, socket: GameSocket, role: Player, action: Onlin
 
   if (room.engine.currentPlayer !== role) {
     return { ok: false, message: '还没轮到你' };
+  }
+
+  if (room.pendingUndoRequest) {
+    return { ok: false, message: '请先处理悔棋请求' };
   }
 
   if (action.kind === 'check') {
@@ -190,6 +239,7 @@ function emitRoomState(room: Room, message?: string, outcome?: MoveOutcome): voi
       role,
       isHost: socketId === room.hostId,
       players,
+      pendingUndoRequest: room.pendingUndoRequest ? { ...room.pendingUndoRequest } : null,
       state: room.engine.exportState(),
       message,
       outcome
@@ -207,6 +257,7 @@ function leaveCurrentRoom(socket: GameSocket): void {
 
   if (!room) return;
 
+  room.pendingUndoRequest = null;
   room.sockets.delete(socket.id);
   if (room.sockets.size === 0) {
     rooms.delete(code);
@@ -245,6 +296,11 @@ function getPlayers(room: Room) {
     gold: roles.includes(2),
     spectators: roles.filter((role) => role === 'spectator').length
   };
+}
+
+function hasOpponent(room: Room, player: Player): boolean {
+  const opponent = otherPlayer(player);
+  return [...room.sockets.values()].includes(opponent);
 }
 
 function createRoomCode(): string {
