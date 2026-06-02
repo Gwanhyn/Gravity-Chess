@@ -307,8 +307,6 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
     statusText.textContent = '平局';
   } else if (aiPending) {
     statusText.textContent = 'AI 思考中';
-  } else if (!engine.settings.autoWinCheckEnabled && engine.manualClaimPlayer) {
-    statusText.textContent = `${engine.getPlayerName(currentPlayer)}行动，可先验${engine.getPlayerName(engine.manualClaimPlayer)}`;
   } else {
     statusText.textContent = `${engine.getPlayerName(currentPlayer)}行动`;
   }
@@ -320,19 +318,12 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   dropModeBtn.classList.toggle('active', selectedMode === 'drop');
   bombModeBtn.classList.toggle('active', selectedMode === 'bomb');
   const checkLabel = checkWinBtn.querySelector('span');
-  const checkPlayer = engine.manualClaimPlayer ?? currentPlayer;
   if (checkLabel) {
-    checkLabel.textContent = engine.manualClaimPlayer
-      ? `验${engine.getPlayerName(checkPlayer).slice(0, 1)}`
-      : '查胜';
+    checkLabel.textContent = '查胜';
   }
-  checkWinBtn.title = `检查${engine.getPlayerName(checkPlayer)}是否获胜`;
+  checkWinBtn.title = `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
   checkWinBtn.disabled =
-    engine.settings.autoWinCheckEnabled ||
-    inputLocked ||
-    replaying ||
-    (isAiTurn() && !engine.manualClaimPlayer) ||
-    status !== 'playing';
+    engine.settings.autoWinCheckEnabled || inputLocked || replaying || isAiTurn() || status !== 'playing';
   bombModeBtn.disabled = !canUseBomb(currentPlayer) || inputLocked || replaying || isAiTurn();
   flipBtn.disabled = !canUseFlip(currentPlayer) || inputLocked || replaying || isAiTurn() || status !== 'playing';
   undoBtn.disabled = inputLocked || replaying || engine.history.length === 0;

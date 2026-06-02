@@ -63,7 +63,6 @@ export interface EngineSnapshot {
   winner: Player | null;
   winLine: Position[];
   gravity: GravityDirection;
-  manualClaimPlayer: Player | null;
   bombsLeft: Record<Player, number>;
   flipsLeft: Record<Player, number>;
   turnRemaining: number;

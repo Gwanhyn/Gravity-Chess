@@ -37,7 +37,6 @@ export class GameEngine {
   winner: Player | null = null;
   winLine: Position[] = [];
   gravity: GravityDirection = 'down';
-  manualClaimPlayer: Player | null = null;
   bombsLeft: Record<Player, number> = { 1: 0, 2: 0 };
   flipsLeft: Record<Player, number> = { 1: 0, 2: 0 };
   turnRemaining = DEFAULT_SETTINGS.turnSeconds;
@@ -65,7 +64,6 @@ export class GameEngine {
     this.winner = null;
     this.winLine = [];
     this.gravity = 'down';
-    this.manualClaimPlayer = null;
     this.bombsLeft = {
       1: this.settings.bombsEnabled ? 1 : 0,
       2: this.settings.bombsEnabled ? 1 : 0
@@ -197,8 +195,7 @@ export class GameEngine {
       return { ok: false, message: '自动查胜已开启' };
     }
 
-    const player = this.manualClaimPlayer ?? this.currentPlayer;
-    const wasPendingClaim = this.manualClaimPlayer !== null;
+    const player = this.currentPlayer;
     this.pushHistory();
     const win = this.board.scanPlayerWinner(player);
     const label = win ? `${PLAYER_NAMES[player]} 查胜成功` : `${PLAYER_NAMES[player]} 查胜未中`;
@@ -208,7 +205,6 @@ export class GameEngine {
       this.status = 'won';
       this.winner = player;
       this.winLine = win.line;
-      this.manualClaimPlayer = null;
       this.replayFrames.push(this.createReplayFrame(label));
       return {
         ok: true,
@@ -218,12 +214,11 @@ export class GameEngine {
       };
     }
 
-    this.manualClaimPlayer = null;
     if (this.board.isDraw(this.gravity)) {
       this.status = 'draw';
       this.winner = null;
       this.winLine = [];
-    } else if (!wasPendingClaim) {
+    } else {
       this.currentPlayer = otherPlayer(this.currentPlayer);
       this.turnRemaining = this.settings.turnSeconds;
     }
@@ -345,7 +340,6 @@ export class GameEngine {
 
     if (!advanceTurn) return;
 
-    this.manualClaimPlayer = this.settings.autoWinCheckEnabled ? null : this.currentPlayer;
     this.currentPlayer = otherPlayer(this.currentPlayer);
     this.turnRemaining = this.settings.turnSeconds;
   }
@@ -356,7 +350,6 @@ export class GameEngine {
     const label = `${PLAYER_NAMES[player]} 超时`;
     this.recordMove('timeout', player, label);
     this.currentPlayer = otherPlayer(player);
-    this.manualClaimPlayer = null;
     this.turnRemaining = this.settings.turnSeconds;
     this.replayFrames.push(this.createReplayFrame(label));
   }
@@ -373,7 +366,6 @@ export class GameEngine {
       winner: this.winner,
       winLine: this.winLine.map((cell) => ({ ...cell })),
       gravity: this.gravity,
-      manualClaimPlayer: this.manualClaimPlayer,
       bombsLeft: { ...this.bombsLeft },
       flipsLeft: { ...this.flipsLeft },
       turnRemaining: this.turnRemaining,
@@ -393,7 +385,6 @@ export class GameEngine {
     this.winner = snapshot.winner;
     this.winLine = snapshot.winLine.map((cell) => ({ ...cell }));
     this.gravity = snapshot.gravity;
-    this.manualClaimPlayer = snapshot.manualClaimPlayer;
     this.bombsLeft = { ...snapshot.bombsLeft };
     this.flipsLeft = { ...snapshot.flipsLeft };
     this.turnRemaining = snapshot.turnRemaining;
