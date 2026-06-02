@@ -5,16 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:lan": "tsx server.ts",
     "build": "tsc && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "start:lan": "tsx server.ts --prod"
   },
   "dependencies": {
-    "lucide": "^0.468.0"
+    "express": "^5.2.1",
+    "lucide": "^0.468.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.22.4",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"
   }

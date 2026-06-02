@@ -6,13 +6,25 @@ import {
   Bomb,
   CircleDot,
   createIcons,
+  LogIn,
+  LogOut,
   Play,
   RefreshCw,
-  Undo2
+  Undo2,
+  Wifi
 } from 'lucide';
+import { io, type Socket } from 'socket.io-client';
 import './style.css';
 import { GameEngine } from './core/GameEngine';
-import { DEFAULT_SETTINGS, type ActionMode, type GameSettings, type Player, type ReplayFrame } from './core/types';
+import {
+  DEFAULT_SETTINGS,
+  type ActionMode,
+  type GameSettings,
+  type MoveOutcome,
+  type Player,
+  type ReplayFrame
+} from './core/types';
+import type { ClientToServerEvents, OnlineRole, OnlineRoomState, ServerToClientEvents } from './network/types';
 import { CanvasRenderer } from './render/CanvasRenderer';
 
 const engine = new GameEngine(DEFAULT_SETTINGS);
@@ -26,7 +38,7 @@ const renderer = new CanvasRenderer(canvas, canvasShell, engine.board, () => ({
   winner: engine.winner,
   winLine: engine.winLine,
   actionMode: selectedMode,
-  previewEnabled: !inputLocked && !replaying && !isAiTurn() && engine.status === 'playing',
+  previewEnabled: !inputLocked && !replaying && canActLocally() && engine.status === 'playing',
   scoreSkew: engine.getScoreSkew()
 }));
 
@@ -59,6 +71,13 @@ const turnSecondsOutput = query<HTMLOutputElement>('#turnSecondsOutput');
 const totalTimerInput = query<HTMLInputElement>('#totalTimerInput');
 const totalMinutesInput = query<HTMLInputElement>('#totalMinutesInput');
 const totalMinutesOutput = query<HTMLOutputElement>('#totalMinutesOutput');
+const onlineRoleBadge = query<HTMLElement>('#onlineRoleBadge');
+const onlineStatus = query<HTMLElement>('#onlineStatus');
+const roomCodeInput = query<HTMLInputElement>('#roomCodeInput');
+const hostRoomBtn = query<HTMLButtonElement>('#hostRoomBtn');
+const joinRoomBtn = query<HTMLButtonElement>('#joinRoomBtn');
+const leaveRoomBtn = query<HTMLButtonElement>('#leaveRoomBtn');
+const shareUrl = query<HTMLElement>('#shareUrl');
 
 const dropModeBtn = query<HTMLButtonElement>('#dropModeBtn');
 const checkWinBtn = query<HTMLButtonElement>('#checkWinBtn');
@@ -75,9 +94,12 @@ const lucideIcons = {
   BadgeCheck,
   Bomb,
   CircleDot,
+  LogIn,
+  LogOut,
   Play,
   RefreshCw,
-  Undo2
+  Undo2,
+  Wifi
 };
 
 let selectedMode: ActionMode = 'drop';
@@ -86,6 +108,9 @@ let aiPending = false;
 let replaying = false;
 let replayTimer: number | null = null;
 let lastTick = performance.now();
+let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
+let onlineRoom: OnlineRoomState | null = null;
+let pendingRemoteOutcome: MoveOutcome | null = null;
 
 createIcons({ icons: lucideIcons });
 syncSettingsToForm(engine.settings);
@@ -97,7 +122,7 @@ function wireEvents(): void {
   canvas.addEventListener('pointermove', (event) => renderer.setHoverFromEvent(event));
   canvas.addEventListener('pointerleave', () => renderer.clearHover());
   canvas.addEventListener('click', async (event) => {
-    if (inputLocked || replaying || isAiTurn() || engine.status !== 'playing') return;
+    if (inputLocked || replaying || !canActLocally() || engine.status !== 'playing') return;
     const col = renderer.getColumnFromEvent(event);
     if (col === null) return;
     await performColumnAction(col);
@@ -116,17 +141,21 @@ function wireEvents(): void {
   });
 
   checkWinBtn.addEventListener('click', async () => {
-    if (inputLocked || replaying || isAiTurn()) return;
+    if (inputLocked || replaying || !canActLocally()) return;
     await performManualCheck();
   });
 
   flipBtn.addEventListener('click', async () => {
-    if (inputLocked || replaying || isAiTurn()) return;
+    if (inputLocked || replaying || !canActLocally()) return;
     await performFlip();
   });
 
   undoBtn.addEventListener('click', () => {
     if (inputLocked || replaying) return;
+    if (isOnline()) {
+      emitOnlineAction({ kind: 'undo' });
+      return;
+    }
     if (engine.undo()) {
       selectedMode = 'drop';
       renderer.setReplayFrame(null);
@@ -143,6 +172,9 @@ function wireEvents(): void {
 
   newGameBtn.addEventListener('click', () => resetGame(readSettings()));
   applySettingsBtn.addEventListener('click', () => resetGame(readSettings()));
+  hostRoomBtn.addEventListener('click', () => createOnlineRoom());
+  joinRoomBtn.addEventListener('click', () => joinOnlineRoom());
+  leaveRoomBtn.addEventListener('click', () => leaveOnlineRoom());
 
   turnSecondsInput.addEventListener('input', () => {
     turnSecondsOutput.value = turnSecondsInput.value;
@@ -157,6 +189,11 @@ function wireEvents(): void {
 }
 
 async function performColumnAction(col: number): Promise<void> {
+  if (isOnline()) {
+    emitOnlineAction({ kind: 'drop', col, mode: selectedMode });
+    return;
+  }
+
   const outcome = engine.playColumn(col, selectedMode);
   if (!outcome.ok) {
     selectedMode = 'drop';
@@ -168,6 +205,11 @@ async function performColumnAction(col: number): Promise<void> {
 }
 
 async function performFlip(): Promise<void> {
+  if (isOnline()) {
+    emitOnlineAction({ kind: 'flip' });
+    return;
+  }
+
   const outcome = engine.flipGravity();
   if (!outcome.ok) {
     updateUI(outcome.message);
@@ -178,6 +220,11 @@ async function performFlip(): Promise<void> {
 }
 
 async function performManualCheck(): Promise<void> {
+  if (isOnline()) {
+    emitOnlineAction({ kind: 'check' });
+    return;
+  }
+
   const outcome = engine.checkWinManually();
   if (!outcome.ok) {
     updateUI(outcome.message);
@@ -187,7 +234,7 @@ async function performManualCheck(): Promise<void> {
   await playOutcome(outcome);
 }
 
-async function playOutcome(outcome: ReturnType<GameEngine['playColumn']> | ReturnType<GameEngine['flipGravity']>): Promise<void> {
+async function playOutcome(outcome: MoveOutcome): Promise<void> {
   inputLocked = true;
   renderer.setReplayFrame(null);
   updateUI();
@@ -203,7 +250,7 @@ async function playOutcome(outcome: ReturnType<GameEngine['playColumn']> | Retur
 }
 
 function maybeScheduleAi(): void {
-  if (!isAiTurn() || inputLocked || replaying || aiPending || engine.status !== 'playing') return;
+  if (isOnline() || !isAiTurn() || inputLocked || replaying || aiPending || engine.status !== 'playing') return;
 
   aiPending = true;
   window.setTimeout(async () => {
@@ -253,7 +300,88 @@ function startReplay(): void {
   showFrame();
 }
 
+function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
+  if (socket) return socket;
+
+  socket = io();
+  socket.on('room:state', async (payload) => {
+    onlineRoom = payload;
+    pendingRemoteOutcome = payload.outcome ?? null;
+    engine.importState(payload.state);
+    renderer.setReplayFrame(null);
+    renderer.setBoard(engine.board);
+    syncSettingsToForm(engine.settings);
+
+    const outcome = pendingRemoteOutcome;
+    pendingRemoteOutcome = null;
+    if (outcome?.ok && outcome.kind !== 'check') {
+      inputLocked = true;
+      updateUI(payload.message);
+      await renderer.animateMove(outcome);
+      inputLocked = false;
+    } else {
+      inputLocked = false;
+    }
+
+    if (!canUseBomb(engine.currentPlayer)) {
+      selectedMode = 'drop';
+    }
+    updateUI(payload.message);
+  });
+
+  socket.on('room:error', (payload) => {
+    inputLocked = false;
+    updateUI(payload.message);
+  });
+
+  socket.on('disconnect', () => {
+    onlineRoom = null;
+    updateUI('联机已断开');
+  });
+
+  return socket;
+}
+
+function createOnlineRoom(): void {
+  getSocket().emit('room:create', readSettings());
+}
+
+function joinOnlineRoom(): void {
+  const code = roomCodeInput.value.trim().toUpperCase();
+  if (!code) {
+    updateUI('请输入房间码');
+    return;
+  }
+  getSocket().emit('room:join', code);
+}
+
+function leaveOnlineRoom(): void {
+  if (!socket) return;
+  socket.emit('room:leave');
+  onlineRoom = null;
+  updateUI('已离开房间');
+}
+
+function emitOnlineAction(action: Parameters<ClientToServerEvents['game:action']>[0]): void {
+  if (!socket || !onlineRoom) {
+    updateUI('尚未加入房间');
+    return;
+  }
+  inputLocked = true;
+  updateUI();
+  socket.emit('game:action', action);
+}
+
 function resetGame(settings: GameSettings): void {
+  if (isOnline()) {
+    if (onlineRoom?.isHost) {
+      emitOnlineAction({ kind: 'reset', settings });
+    } else {
+      updateUI('只有房主可以重开或应用设置');
+    }
+    return;
+  }
+
   if (replayTimer !== null) {
     window.clearTimeout(replayTimer);
     replayTimer = null;
@@ -274,7 +402,7 @@ function tick(now: number): void {
   const delta = Math.min(0.25, (now - lastTick) / 1000);
   lastTick = now;
 
-  if (!replaying) {
+  if (!replaying && !isOnline()) {
     const changed = engine.tick(delta);
     if (changed) {
       if (!canUseBomb(engine.currentPlayer)) selectedMode = 'drop';
@@ -323,12 +451,15 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   }
   checkWinBtn.title = `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
   checkWinBtn.disabled =
-    engine.settings.autoWinCheckEnabled || inputLocked || replaying || isAiTurn() || status !== 'playing';
-  bombModeBtn.disabled = !canUseBomb(currentPlayer) || inputLocked || replaying || isAiTurn();
-  flipBtn.disabled = !canUseFlip(currentPlayer) || inputLocked || replaying || isAiTurn() || status !== 'playing';
-  undoBtn.disabled = inputLocked || replaying || engine.history.length === 0;
+    engine.settings.autoWinCheckEnabled || inputLocked || replaying || !canActLocally() || status !== 'playing';
+  bombModeBtn.disabled = !canUseBomb(currentPlayer) || inputLocked || replaying || !canActLocally();
+  flipBtn.disabled = !canUseFlip(currentPlayer) || inputLocked || replaying || !canActLocally() || status !== 'playing';
+  undoBtn.disabled = inputLocked || replaying || (!isOnline() && engine.history.length === 0);
   replayBtn.disabled = inputLocked || replaying || engine.replayFrames.length <= 1;
-  dropModeBtn.disabled = inputLocked || replaying || isAiTurn() || status !== 'playing';
+  dropModeBtn.disabled = inputLocked || replaying || !canActLocally() || status !== 'playing';
+  applySettingsBtn.disabled = isOnline() && !onlineRoom?.isHost;
+  newGameBtn.disabled = isOnline() && !onlineRoom?.isHost;
+  updateOnlineUI();
 
   renderSummary();
   renderMoves();
@@ -354,6 +485,7 @@ function renderSummary(): void {
   if (engine.settings.obstaclesEnabled) badges.push('障碍');
   if (engine.settings.bombsEnabled) badges.push(`炸弹 ${engine.bombsLeft[1]}/${engine.bombsLeft[2]}`);
   if (engine.settings.gravityFlipEnabled) badges.push(`反转 ${engine.flipsLeft[1]}/${engine.flipsLeft[2]}`);
+  if (onlineRoom) badges.push(`房间 ${onlineRoom.roomCode}`);
   modeSummary.innerHTML = badges.map((badge) => `<span>${badge}</span>`).join('');
 }
 
@@ -368,7 +500,50 @@ function renderMoves(): void {
     .join('');
 }
 
+function updateOnlineUI(): void {
+  if (!onlineRoom) {
+    onlineRoleBadge.textContent = socket?.connected ? '未入房' : '离线';
+    onlineStatus.textContent = '本地模式';
+    shareUrl.textContent = '';
+    roomCodeInput.disabled = false;
+    hostRoomBtn.disabled = false;
+    joinRoomBtn.disabled = false;
+    leaveRoomBtn.disabled = true;
+    return;
+  }
+
+  const roleLabel = roleToLabel(onlineRoom.role);
+  onlineRoleBadge.textContent = onlineRoom.isHost ? `${roleLabel} 房主` : roleLabel;
+  onlineStatus.textContent = `房间 ${onlineRoom.roomCode} | 红方 ${onlineRoom.players.red ? '在线' : '空位'} | 金方 ${
+    onlineRoom.players.gold ? '在线' : '空位'
+  } | 观战 ${onlineRoom.players.spectators}`;
+  roomCodeInput.value = onlineRoom.roomCode;
+  roomCodeInput.disabled = true;
+  hostRoomBtn.disabled = true;
+  joinRoomBtn.disabled = true;
+  leaveRoomBtn.disabled = false;
+  shareUrl.textContent = `分享：${window.location.origin}/  房间码：${onlineRoom.roomCode}`;
+}
+
+function isOnline(): boolean {
+  return onlineRoom !== null;
+}
+
+function canActLocally(): boolean {
+  if (!isOnline()) {
+    return !isAiTurn();
+  }
+  return onlineRoom?.role === engine.currentPlayer;
+}
+
+function roleToLabel(role: OnlineRole): string {
+  if (role === 1) return '红方';
+  if (role === 2) return '金方';
+  return '观战';
+}
+
 function readSettings(): GameSettings {
+  const matchMode = isOnline() ? 'local' : modeSelect.value === 'ai' ? 'ai' : 'local';
   return {
     ...engine.settings,
     rows: readNumber(rowsInput, DEFAULT_SETTINGS.rows),
@@ -381,7 +556,7 @@ function readSettings(): GameSettings {
     obstaclesEnabled: obstaclesInput.checked,
     bombsEnabled: bombsInput.checked,
     gravityFlipEnabled: gravityFlipInput.checked,
-    matchMode: modeSelect.value === 'ai' ? 'ai' : 'local',
+    matchMode,
     aiDifficulty:
       difficultySelect.value === 'hard' ? 'hard' : difficultySelect.value === 'easy' ? 'easy' : 'medium',
     turnTimerEnabled: turnTimerInput.checked,

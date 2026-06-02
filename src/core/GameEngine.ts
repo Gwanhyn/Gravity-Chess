@@ -14,6 +14,7 @@ import {
   type Player,
   type Position,
   type ReplayFrame,
+  type SerializedGameState,
   type WinResult
 } from './types';
 
@@ -311,6 +312,60 @@ export class GameEngine {
 
   getPlayerName(player: Player): string {
     return PLAYER_NAMES[player];
+  }
+
+  exportState(): SerializedGameState {
+    return {
+      settings: { ...this.settings },
+      matrix: this.board.cloneMatrix(),
+      currentPlayer: this.currentPlayer,
+      status: this.status,
+      winner: this.winner,
+      winLine: this.winLine.map((cell) => ({ ...cell })),
+      gravity: this.gravity,
+      bombsLeft: { ...this.bombsLeft },
+      flipsLeft: { ...this.flipsLeft },
+      turnRemaining: this.turnRemaining,
+      totalRemaining: { ...this.totalRemaining },
+      moves: this.moves.map((move) => ({
+        ...move,
+        position: move.position ? { ...move.position } : undefined,
+        removed: move.removed?.map((cell) => ({ ...cell }))
+      })),
+      replayFrames: this.replayFrames.map((frame) => ({
+        ...frame,
+        matrix: frame.matrix.map((row) => [...row]),
+        winLine: frame.winLine.map((cell) => ({ ...cell }))
+      })),
+      historyDepth: this.history.length
+    };
+  }
+
+  importState(state: SerializedGameState): void {
+    this.settings = { ...state.settings };
+    this.board = new Board(this.settings);
+    this.board.setMatrix(state.matrix);
+    this.currentPlayer = state.currentPlayer;
+    this.status = state.status;
+    this.winner = state.winner;
+    this.winLine = state.winLine.map((cell) => ({ ...cell }));
+    this.gravity = state.gravity;
+    this.bombsLeft = { ...state.bombsLeft };
+    this.flipsLeft = { ...state.flipsLeft };
+    this.turnRemaining = state.turnRemaining;
+    this.totalRemaining = { ...state.totalRemaining };
+    this.moves = state.moves.map((move) => ({
+      ...move,
+      position: move.position ? { ...move.position } : undefined,
+      removed: move.removed?.map((cell) => ({ ...cell }))
+    }));
+    this.replayFrames = state.replayFrames.map((frame) => ({
+      ...frame,
+      matrix: frame.matrix.map((row) => [...row]),
+      winLine: frame.winLine.map((cell) => ({ ...cell }))
+    }));
+    this.history = [];
+    this.moveSequence = this.moves.reduce((max, move) => Math.max(max, move.id), 0);
   }
 
   private finishAction(win: WinResult | null, preferredPlayer: Player, advanceTurn: boolean): void {

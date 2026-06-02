@@ -170,6 +170,35 @@
 
         <section>
           <div class="section-head">
+            <h2>联机</h2>
+            <span id="onlineRoleBadge">离线</span>
+          </div>
+          <div class="online-box">
+            <p id="onlineStatus" class="online-status">本地模式</p>
+            <label class="select-field">
+              <span>房间码</span>
+              <input id="roomCodeInput" class="room-code-input" type="text" maxlength="4" placeholder="ABCD" />
+            </label>
+            <div class="online-actions">
+              <button id="hostRoomBtn" class="text-command" type="button">
+                <i data-lucide="wifi"></i>
+                <span>创建</span>
+              </button>
+              <button id="joinRoomBtn" class="text-command" type="button">
+                <i data-lucide="log-in"></i>
+                <span>加入</span>
+              </button>
+              <button id="leaveRoomBtn" class="text-command muted" type="button">
+                <i data-lucide="log-out"></i>
+                <span>离开</span>
+              </button>
+            </div>
+            <p id="shareUrl" class="share-url"></p>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
             <h2>计时</h2>
           </div>
           <label class="toggle-row">

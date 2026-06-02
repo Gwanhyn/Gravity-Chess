@@ -419,6 +419,7 @@ canvas {
 }
 
 input[type='number'],
+input[type='text'],
 select {
   width: 100%;
   min-height: 38px;
@@ -430,6 +431,10 @@ select {
 }
 
 input[type='number'] {
+  padding: 0 10px;
+}
+
+input[type='text'] {
   padding: 0 10px;
 }
 
@@ -498,6 +503,43 @@ button:focus-visible {
   padding: 0 12px;
   color: #ffffff;
   background: #253047;
+}
+
+.text-command.muted {
+  color: #253047;
+  background: #ffffff;
+}
+
+.text-command svg {
+  width: 16px;
+  height: 16px;
+}
+
+.online-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.online-status,
+.share-url {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.room-code-input {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 900;
+}
+
+.online-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 @media (max-width: 1120px) {

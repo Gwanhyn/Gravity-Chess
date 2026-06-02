@@ -70,6 +70,23 @@ export interface EngineSnapshot {
   moves: MoveRecord[];
 }
 
+export interface SerializedGameState {
+  settings: GameSettings;
+  matrix: Cell[][];
+  currentPlayer: Player;
+  status: GameStatus;
+  winner: Player | null;
+  winLine: Position[];
+  gravity: GravityDirection;
+  bombsLeft: Record<Player, number>;
+  flipsLeft: Record<Player, number>;
+  turnRemaining: number;
+  totalRemaining: Record<Player, number>;
+  moves: MoveRecord[];
+  replayFrames: ReplayFrame[];
+  historyDepth: number;
+}
+
 export interface ReplayFrame {
   matrix: Cell[][];
   currentPlayer: Player;
