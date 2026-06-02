@@ -11,6 +11,7 @@ import {
   LogOut,
   Play,
   RefreshCw,
+  Settings,
   Undo2,
   Wifi,
   X
@@ -42,7 +43,10 @@ const renderer = new CanvasRenderer(canvas, canvasShell, engine.board, () => ({
   winLine: engine.winLine,
   actionMode: selectedMode,
   previewEnabled: !inputLocked && !replaying && canActLocally() && engine.status === 'playing',
-  scoreSkew: engine.getScoreSkew()
+  scoreSkew: engine.getScoreSkew(),
+  topologyPerspectiveEnabled: engine.settings.topologyPerspectiveEnabled,
+  wrapHorizontal: engine.settings.wrapHorizontal,
+  wrapVertical: engine.settings.wrapVertical
 }));
 
 const currentToken = query<HTMLElement>('#currentToken');
@@ -63,6 +67,7 @@ const obstacleCountInput = query<HTMLInputElement>('#obstacleCountInput');
 const wrapHorizontalInput = query<HTMLInputElement>('#wrapHorizontalInput');
 const wrapVerticalInput = query<HTMLInputElement>('#wrapVerticalInput');
 const autoWinCheckInput = query<HTMLInputElement>('#autoWinCheckInput');
+const topologyPerspectiveInput = query<HTMLInputElement>('#topologyPerspectiveInput');
 const obstaclesInput = query<HTMLInputElement>('#obstaclesInput');
 const bombsInput = query<HTMLInputElement>('#bombsInput');
 const gravityFlipInput = query<HTMLInputElement>('#gravityFlipInput');
@@ -81,6 +86,9 @@ const hostRoomBtn = query<HTMLButtonElement>('#hostRoomBtn');
 const joinRoomBtn = query<HTMLButtonElement>('#joinRoomBtn');
 const leaveRoomBtn = query<HTMLButtonElement>('#leaveRoomBtn');
 const shareUrl = query<HTMLElement>('#shareUrl');
+const settingsDrawer = query<HTMLElement>('#settingsDrawer');
+const settingsToggleBtn = query<HTMLButtonElement>('#settingsToggleBtn');
+const settingsCloseBtn = query<HTMLButtonElement>('#settingsCloseBtn');
 const undoRequestDialog = query<HTMLElement>('#undoRequestDialog');
 const undoRequestTitle = query<HTMLElement>('#undoRequestTitle');
 const undoRequestText = query<HTMLElement>('#undoRequestText');
@@ -107,6 +115,7 @@ const lucideIcons = {
   LogOut,
   Play,
   RefreshCw,
+  Settings,
   Undo2,
   Wifi,
   X
@@ -185,6 +194,8 @@ function wireEvents(): void {
   hostRoomBtn.addEventListener('click', () => createOnlineRoom());
   joinRoomBtn.addEventListener('click', () => joinOnlineRoom());
   leaveRoomBtn.addEventListener('click', () => leaveOnlineRoom());
+  settingsToggleBtn.addEventListener('click', () => setSettingsDrawer(true));
+  settingsCloseBtn.addEventListener('click', () => setSettingsDrawer(false));
   undoAcceptBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-accept' }));
   undoDeclineBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-decline' }));
 
@@ -374,6 +385,10 @@ function leaveOnlineRoom(): void {
   updateUI('已离开房间');
 }
 
+function setSettingsDrawer(open: boolean): void {
+  settingsDrawer.classList.toggle('open', open);
+}
+
 function emitOnlineAction(action: Parameters<ClientToServerEvents['game:action']>[0]): void {
   if (!socket || !onlineRoom) {
     updateUI('尚未加入房间');
@@ -433,7 +448,12 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   const gravity = replayFrame?.gravity ?? engine.gravity;
   const winLine = replayFrame?.winLine ?? engine.winLine;
 
-  document.documentElement.style.setProperty('--board-aspect', `${engine.board.cols} / ${engine.board.rows}`);
+  const perspectiveX = engine.settings.topologyPerspectiveEnabled && engine.settings.wrapHorizontal ? 3 : 1;
+  const perspectiveY = engine.settings.topologyPerspectiveEnabled && engine.settings.wrapVertical ? 3 : 1;
+  document.documentElement.style.setProperty(
+    '--board-aspect',
+    `${engine.board.cols * perspectiveX} / ${engine.board.rows * perspectiveY}`
+  );
   currentToken.className = `player-token ${currentPlayer === 1 ? 'red' : 'gold'}`;
   gravityBadge.innerHTML = `<i data-lucide="${gravity === 'down' ? 'arrow-down' : 'arrow-up'}"></i>`;
 
@@ -500,6 +520,7 @@ function renderSummary(): void {
     `${engine.board.winLength} 连珠`,
     engine.settings.autoWinCheckEnabled ? '自动查胜' : '手动查胜'
   ];
+  if (engine.settings.topologyPerspectiveEnabled) badges.push('拓扑透视');
   if (engine.settings.wrapHorizontal) badges.push('左右联通');
   if (engine.settings.wrapVertical) badges.push('上下联通');
   if (engine.settings.obstaclesEnabled) badges.push('障碍');
@@ -615,6 +636,7 @@ function readSettings(): GameSettings {
     wrapHorizontal: wrapHorizontalInput.checked,
     wrapVertical: wrapVerticalInput.checked,
     autoWinCheckEnabled: autoWinCheckInput.checked,
+    topologyPerspectiveEnabled: topologyPerspectiveInput.checked,
     obstaclesEnabled: obstaclesInput.checked,
     bombsEnabled: bombsInput.checked,
     gravityFlipEnabled: gravityFlipInput.checked,
@@ -636,6 +658,7 @@ function syncSettingsToForm(settings: GameSettings): void {
   wrapHorizontalInput.checked = settings.wrapHorizontal;
   wrapVerticalInput.checked = settings.wrapVertical;
   autoWinCheckInput.checked = settings.autoWinCheckEnabled;
+  topologyPerspectiveInput.checked = settings.topologyPerspectiveEnabled;
   obstaclesInput.checked = settings.obstaclesEnabled;
   bombsInput.checked = settings.bombsEnabled;
   gravityFlipInput.checked = settings.gravityFlipEnabled;

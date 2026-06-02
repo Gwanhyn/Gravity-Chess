@@ -60,7 +60,7 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(330px, 380px) minmax(360px, 1fr) minmax(230px, 270px);
+  grid-template-columns: minmax(360px, 24rem) minmax(0, 1fr);
   gap: 14px;
   height: 100vh;
   padding: 14px;
@@ -96,6 +96,13 @@ button:disabled {
   min-height: 56px;
 }
 
+.brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .brand h1 {
   margin: 0;
   font-size: clamp(1.6rem, 4vw, 2.25rem);
@@ -124,6 +131,12 @@ button:disabled {
   color: #ffffff;
   background: linear-gradient(145deg, #2d3f60, #172237);
   border-radius: 8px;
+}
+
+.icon-command.subtle {
+  color: #253047;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
 }
 
 .gravity-badge svg,
@@ -651,6 +664,39 @@ button:focus-visible {
   gap: 10px;
 }
 
+.settings-drawer {
+  position: fixed;
+  inset: 14px 14px 14px auto;
+  z-index: 40;
+  width: min(360px, calc(100vw - 28px));
+  height: auto;
+  transform: translateX(calc(100% + 24px));
+  transition: transform 220ms ease, box-shadow 220ms ease;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 249, 255, 0.76)),
+    rgba(248, 251, 255, 0.82);
+  box-shadow: 0 28px 80px rgba(24, 34, 53, 0.26);
+}
+
+.settings-drawer.open {
+  transform: translateX(0);
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 4px;
+}
+
+.drawer-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.22rem;
+  font-weight: 950;
+}
+
 @media (max-width: 1120px) {
   body {
     overflow: auto;
@@ -746,4 +792,26 @@ button:focus-visible {
   .field-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.settings-panel.settings-drawer {
+  position: fixed;
+  display: flex;
+  grid-column: auto;
+  grid-template-columns: none;
+  align-items: stretch;
+  height: auto;
+  overflow-y: auto;
+}
+
+.settings-panel.settings-drawer section {
+  height: auto;
+  padding-right: 2px;
+  border-right: 0;
+  border-bottom: 1px solid rgba(216, 224, 234, 0.82);
+}
+
+.settings-panel.settings-drawer section:last-child {
+  padding-right: 2px;
+  border-bottom: 0;
 }

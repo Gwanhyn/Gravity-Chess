@@ -19,6 +19,9 @@ interface RenderContext {
   actionMode: ActionMode;
   previewEnabled: boolean;
   scoreSkew: number;
+  topologyPerspectiveEnabled: boolean;
+  wrapHorizontal: boolean;
+  wrapVertical: boolean;
 }
 
 interface Layout {
@@ -27,6 +30,8 @@ interface Layout {
   cell: number;
   originX: number;
   originY: number;
+  boardWidth: number;
+  boardHeight: number;
   radius: number;
 }
 
@@ -61,6 +66,8 @@ export class CanvasRenderer {
     cell: 0,
     originX: 0,
     originY: 0,
+    boardWidth: 0,
+    boardHeight: 0,
     radius: 0
   };
   private falling: FallingAnimation[] = [];
@@ -194,8 +201,17 @@ export class CanvasRenderer {
     this.canvas.height = Math.floor(height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const padding = Math.max(14, Math.min(width, height) * 0.055);
-    const cell = Math.min((width - padding * 2) / this.board.cols, (height - padding * 2) / this.board.rows);
+    let perspective = { active: false, factorX: 1, factorY: 1 };
+    try {
+      perspective = this.getPerspective(this.getContext());
+    } catch {
+      perspective = { active: false, factorX: 1, factorY: 1 };
+    }
+    const padding = Math.max(16, Math.min(width, height) * (perspective.active ? 0.035 : 0.055));
+    const cell = Math.min(
+      (width - padding * 2) / (this.board.cols * perspective.factorX),
+      (height - padding * 2) / (this.board.rows * perspective.factorY)
+    );
     const boardWidth = cell * this.board.cols;
     const boardHeight = cell * this.board.rows;
 
@@ -205,6 +221,8 @@ export class CanvasRenderer {
       cell,
       originX: (width - boardWidth) / 2,
       originY: (height - boardHeight) / 2,
+      boardWidth,
+      boardHeight,
       radius: cell * 0.36
     };
   }
@@ -217,10 +235,18 @@ export class CanvasRenderer {
     const status = this.replayFrame?.status ?? context.status;
     const winner = this.replayFrame?.winner ?? context.winner;
 
+    const perspectiveOffsets = this.getMirrorOffsets(context);
+
     this.drawBackground(context.scoreSkew);
-    this.drawBoardPlate();
+    for (const offset of perspectiveOffsets) {
+      if (offset.x === 0 && offset.y === 0) continue;
+      this.drawBoardPlate(offset.x, offset.y, 0.28);
+      this.drawCells(matrix, offset.x, offset.y, 0.24);
+    }
+
+    this.drawBoardPlate(0, 0, 1);
     this.drawHover(context, gravity);
-    this.drawCells(matrix);
+    this.drawCells(matrix, 0, 0, 1);
     this.drawGhost(context, gravity);
     this.drawFalling(time);
     this.drawBlasts(time);
@@ -255,20 +281,20 @@ export class CanvasRenderer {
     this.ctx.restore();
   }
 
-  private drawBoardPlate(): void {
-    const { originX, originY, cell } = this.layout;
-    const width = cell * this.board.cols;
-    const height = cell * this.board.rows;
+  private drawBoardPlate(offsetX = 0, offsetY = 0, alpha = 1): void {
+    const { cell, boardWidth: width, boardHeight: height } = this.layout;
+    const origin = this.boardOrigin(offsetX, offsetY);
     this.ctx.save();
+    this.ctx.globalAlpha = alpha;
     this.ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
-    this.ctx.shadowBlur = 24;
-    this.ctx.shadowOffsetY = 12;
-    this.roundRect(originX - cell * 0.1, originY - cell * 0.1, width + cell * 0.2, height + cell * 0.2, 18);
+    this.ctx.shadowBlur = offsetX === 0 && offsetY === 0 ? 24 : 10;
+    this.ctx.shadowOffsetY = offsetX === 0 && offsetY === 0 ? 12 : 4;
+    this.roundRect(origin.x - cell * 0.1, origin.y - cell * 0.1, width + cell * 0.2, height + cell * 0.2, 18);
     this.ctx.fillStyle = '#253047';
     this.ctx.fill();
 
     this.ctx.shadowColor = 'transparent';
-    this.roundRect(originX, originY, width, height, 14);
+    this.roundRect(origin.x, origin.y, width, height, 14);
     this.ctx.fillStyle = '#30415f';
     this.ctx.fill();
     this.ctx.restore();
@@ -289,20 +315,23 @@ export class CanvasRenderer {
     this.ctx.restore();
   }
 
-  private drawCells(matrix: Cell[][]): void {
+  private drawCells(matrix: Cell[][], offsetX = 0, offsetY = 0, alpha = 1): void {
+    this.ctx.save();
+    this.ctx.globalAlpha = alpha;
     for (let row = 0; row < this.board.rows; row += 1) {
       for (let col = 0; col < this.board.cols; col += 1) {
-        const center = this.centerOf(row, col);
+        const center = this.centerOf(row, col, offsetX, offsetY);
         const cell = matrix[row][col];
         this.drawHole(center.x, center.y);
 
         if (cell === -1) {
           this.drawObstacle(center.x, center.y);
         } else if ((cell === 1 || cell === 2) && !this.hiddenCells.has(this.key({ row, col }))) {
-          this.drawPiece(center.x, center.y, cell, 1, this.layout.radius);
+          this.drawPiece(center.x, center.y, cell, alpha, this.layout.radius);
         }
       }
     }
+    this.ctx.restore();
   }
 
   private drawGhost(context: RenderContext, gravity: GravityDirection): void {
@@ -497,12 +526,47 @@ export class CanvasRenderer {
     this.ctx.restore();
   }
 
-  private centerOf(row: number, col: number): { x: number; y: number } {
+  private centerOf(row: number, col: number, offsetX = 0, offsetY = 0): { x: number; y: number } {
+    const origin = this.boardOrigin(offsetX, offsetY);
+    const { cell } = this.layout;
+    return {
+      x: origin.x + col * cell + cell / 2,
+      y: origin.y + row * cell + cell / 2
+    };
+  }
+
+  private boardOrigin(offsetX: number, offsetY: number): { x: number; y: number } {
     const { originX, originY, cell } = this.layout;
     return {
-      x: originX + col * cell + cell / 2,
-      y: originY + row * cell + cell / 2
+      x: originX + offsetX * cell * this.board.cols,
+      y: originY + offsetY * cell * this.board.rows
     };
+  }
+
+  private getPerspective(context: RenderContext): { active: boolean; factorX: number; factorY: number } {
+    const active = context.topologyPerspectiveEnabled && (context.wrapHorizontal || context.wrapVertical);
+    return {
+      active,
+      factorX: active && context.wrapHorizontal ? 3 : 1,
+      factorY: active && context.wrapVertical ? 3 : 1
+    };
+  }
+
+  private getMirrorOffsets(context: RenderContext): Array<{ x: number; y: number }> {
+    const perspective = this.getPerspective(context);
+    if (!perspective.active) return [{ x: 0, y: 0 }];
+
+    const xs = context.wrapHorizontal ? [-1, 0, 1] : [0];
+    const ys = context.wrapVertical ? [-1, 0, 1] : [0];
+    const offsets: Array<{ x: number; y: number }> = [];
+
+    for (const y of ys) {
+      for (const x of xs) {
+        offsets.push({ x, y });
+      }
+    }
+
+    return offsets;
   }
 
   private startRowOffset(row: number): number {

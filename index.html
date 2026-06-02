@@ -13,8 +13,13 @@
             <p class="eyebrow">Gravity Chess</p>
             <h1>重力棋</h1>
           </div>
-          <div id="gravityBadge" class="gravity-badge" title="当前重力方向">
-            <i data-lucide="arrow-down"></i>
+          <div class="brand-actions">
+            <button id="settingsToggleBtn" class="icon-command subtle" type="button" title="设置">
+              <i data-lucide="settings"></i>
+            </button>
+            <div id="gravityBadge" class="gravity-badge" title="当前重力方向">
+              <i data-lucide="arrow-down"></i>
+            </div>
           </div>
         </header>
 
@@ -91,7 +96,16 @@
         </div>
       </main>
 
-      <aside class="panel settings-panel">
+      <aside id="settingsDrawer" class="panel settings-panel settings-drawer">
+        <div class="drawer-head">
+          <div>
+            <p class="eyebrow">Match Setup</p>
+            <h2>设置</h2>
+          </div>
+          <button id="settingsCloseBtn" class="icon-command subtle" type="button" title="关闭设置">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
         <section>
           <div class="section-head">
             <h2>棋盘</h2>
@@ -132,6 +146,10 @@
           <label class="toggle-row">
             <span>自动查胜</span>
             <input id="autoWinCheckInput" type="checkbox" checked />
+          </label>
+          <label class="toggle-row">
+            <span>拓扑透视</span>
+            <input id="topologyPerspectiveInput" type="checkbox" />
           </label>
           <label class="toggle-row">
             <span>随机障碍</span>

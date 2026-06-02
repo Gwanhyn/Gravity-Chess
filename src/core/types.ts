@@ -36,6 +36,7 @@ export interface BoardOptions {
 
 export interface GameSettings extends BoardOptions {
   autoWinCheckEnabled: boolean;
+  topologyPerspectiveEnabled: boolean;
   bombsEnabled: boolean;
   gravityFlipEnabled: boolean;
   matchMode: MatchMode;
@@ -127,6 +128,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   obstaclesEnabled: false,
   obstacleCount: 2,
   autoWinCheckEnabled: true,
+  topologyPerspectiveEnabled: false,
   bombsEnabled: false,
   gravityFlipEnabled: false,
   matchMode: 'local',
