@@ -448,12 +448,7 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   const gravity = replayFrame?.gravity ?? engine.gravity;
   const winLine = replayFrame?.winLine ?? engine.winLine;
 
-  const perspectiveX = engine.settings.topologyPerspectiveEnabled && engine.settings.wrapHorizontal ? 3 : 1;
-  const perspectiveY = engine.settings.topologyPerspectiveEnabled && engine.settings.wrapVertical ? 3 : 1;
-  document.documentElement.style.setProperty(
-    '--board-aspect',
-    `${engine.board.cols * perspectiveX} / ${engine.board.rows * perspectiveY}`
-  );
+  document.documentElement.style.setProperty('--board-aspect', `${engine.board.cols} / ${engine.board.rows}`);
   currentToken.className = `player-token ${currentPlayer === 1 ? 'red' : 'gold'}`;
   gravityBadge.innerHTML = `<i data-lucide="${gravity === 'down' ? 'arrow-down' : 'arrow-up'}"></i>`;
 

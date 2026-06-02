@@ -10,6 +10,8 @@ import type {
   ReplayFrame
 } from '../core/types';
 
+const PERSPECTIVE_REVEAL = 1 / 3;
+
 interface RenderContext {
   currentPlayer: Player;
   gravity: GravityDirection;
@@ -201,16 +203,11 @@ export class CanvasRenderer {
     this.canvas.height = Math.floor(height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    let perspective = { active: false, factorX: 1, factorY: 1 };
-    try {
-      perspective = this.getPerspective(this.getContext());
-    } catch {
-      perspective = { active: false, factorX: 1, factorY: 1 };
-    }
-    const padding = Math.max(16, Math.min(width, height) * (perspective.active ? 0.035 : 0.055));
+    const reserve = this.getPerspectiveReserve();
+    const padding = Math.max(16, Math.min(width, height) * 0.04);
     const cell = Math.min(
-      (width - padding * 2) / (this.board.cols * perspective.factorX),
-      (height - padding * 2) / (this.board.rows * perspective.factorY)
+      (width - padding * 2) / (this.board.cols * (1 + reserve.x)),
+      (height - padding * 2) / (this.board.rows * (1 + reserve.y))
     );
     const boardWidth = cell * this.board.cols;
     const boardHeight = cell * this.board.rows;
@@ -240,8 +237,7 @@ export class CanvasRenderer {
     this.drawBackground(context.scoreSkew);
     for (const offset of perspectiveOffsets) {
       if (offset.x === 0 && offset.y === 0) continue;
-      this.drawBoardPlate(offset.x, offset.y, 0.28);
-      this.drawCells(matrix, offset.x, offset.y, 0.24);
+      this.drawPerspectiveSlice(matrix, offset.x, offset.y);
     }
 
     this.drawBoardPlate(0, 0, 1);
@@ -297,6 +293,17 @@ export class CanvasRenderer {
     this.roundRect(origin.x, origin.y, width, height, 14);
     this.ctx.fillStyle = '#30415f';
     this.ctx.fill();
+    this.ctx.restore();
+  }
+
+  private drawPerspectiveSlice(matrix: Cell[][], offsetX: number, offsetY: number): void {
+    const clip = this.perspectiveClipRect(offsetX, offsetY);
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.rect(clip.x, clip.y, clip.width, clip.height);
+    this.ctx.clip();
+    this.drawBoardPlate(offsetX, offsetY, 0.28);
+    this.drawCells(matrix, offsetX, offsetY, 0.24);
     this.ctx.restore();
   }
 
@@ -543,18 +550,50 @@ export class CanvasRenderer {
     };
   }
 
-  private getPerspective(context: RenderContext): { active: boolean; factorX: number; factorY: number } {
-    const active = context.topologyPerspectiveEnabled && (context.wrapHorizontal || context.wrapVertical);
+  private perspectiveClipRect(offsetX: number, offsetY: number): { x: number; y: number; width: number; height: number } {
+    const { originX, originY, boardWidth, boardHeight } = this.layout;
+    const revealWidth = boardWidth * PERSPECTIVE_REVEAL;
+    const revealHeight = boardHeight * PERSPECTIVE_REVEAL;
+
+    let x = originX;
+    let y = originY;
+    let width = boardWidth;
+    let height = boardHeight;
+
+    if (offsetX < 0) {
+      x = originX - revealWidth;
+      width = revealWidth;
+    } else if (offsetX > 0) {
+      x = originX + boardWidth;
+      width = revealWidth;
+    }
+
+    if (offsetY < 0) {
+      y = originY - revealHeight;
+      height = revealHeight;
+    } else if (offsetY > 0) {
+      y = originY + boardHeight;
+      height = revealHeight;
+    }
+
     return {
-      active,
-      factorX: active && context.wrapHorizontal ? 3 : 1,
-      factorY: active && context.wrapVertical ? 3 : 1
+      x,
+      y,
+      width,
+      height
+    };
+  }
+
+  private getPerspectiveReserve(): { x: number; y: number } {
+    return {
+      x: PERSPECTIVE_REVEAL * 2,
+      y: PERSPECTIVE_REVEAL * 2
     };
   }
 
   private getMirrorOffsets(context: RenderContext): Array<{ x: number; y: number }> {
-    const perspective = this.getPerspective(context);
-    if (!perspective.active) return [{ x: 0, y: 0 }];
+    const active = context.topologyPerspectiveEnabled && (context.wrapHorizontal || context.wrapVertical);
+    if (!active) return [{ x: 0, y: 0 }];
 
     const xs = context.wrapHorizontal ? [-1, 0, 1] : [0];
     const ys = context.wrapVertical ? [-1, 0, 1] : [0];
