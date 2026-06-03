@@ -72,6 +72,8 @@ const obstaclesInput = query<HTMLInputElement>('#obstaclesInput');
 const bombsInput = query<HTMLInputElement>('#bombsInput');
 const gravityFlipInput = query<HTMLInputElement>('#gravityFlipInput');
 const modeSelect = query<HTMLSelectElement>('#modeSelect');
+const redFirstBtn = query<HTMLButtonElement>('#redFirstBtn');
+const goldFirstBtn = query<HTMLButtonElement>('#goldFirstBtn');
 const difficultySelect = query<HTMLSelectElement>('#difficultySelect');
 const turnTimerInput = query<HTMLInputElement>('#turnTimerInput');
 const turnSecondsInput = query<HTMLInputElement>('#turnSecondsInput');
@@ -191,6 +193,8 @@ function wireEvents(): void {
 
   newGameBtn.addEventListener('click', () => resetGame(readSettings()));
   applySettingsBtn.addEventListener('click', () => resetGame(readSettings()));
+  redFirstBtn.addEventListener('click', () => setStartingPlayerChoice(1));
+  goldFirstBtn.addEventListener('click', () => setStartingPlayerChoice(2));
   hostRoomBtn.addEventListener('click', () => createOnlineRoom());
   joinRoomBtn.addEventListener('click', () => joinOnlineRoom());
   leaveRoomBtn.addEventListener('click', () => leaveOnlineRoom());
@@ -493,6 +497,8 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   dropModeBtn.disabled = inputLocked || replaying || hasPendingUndo || !canActLocally() || status !== 'playing';
   applySettingsBtn.disabled = isOnline() && !onlineRoom?.isHost;
   newGameBtn.disabled = isOnline() && !onlineRoom?.isHost;
+  redFirstBtn.disabled = isOnline() && !onlineRoom?.isHost;
+  goldFirstBtn.disabled = isOnline() && !onlineRoom?.isHost;
   updateOnlineUI();
   updateUndoRequestUI();
 
@@ -511,6 +517,7 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
 function renderSummary(): void {
   const badges = [
     engine.settings.matchMode === 'ai' ? `AI ${difficultyLabel(engine.settings.aiDifficulty)}` : '本地双人',
+    `${engine.getPlayerName(engine.settings.startingPlayer)}先手`,
     `${engine.board.rows}x${engine.board.cols}`,
     `${engine.board.winLength} 连珠`,
     engine.settings.autoWinCheckEnabled ? '自动查胜' : '手动查胜'
@@ -566,7 +573,9 @@ function updateOnlineUI(): void {
 
   const roleLabel = roleToLabel(onlineRoom.role);
   onlineRoleBadge.textContent = onlineRoom.isHost ? `${roleLabel} · 房主` : roleLabel;
-  onlineStatus.textContent = `房间 ${onlineRoom.roomCode} | 红方 ${onlineRoom.players.red ? '在线' : '空位'} | 金方 ${
+  onlineStatus.textContent = `房间 ${onlineRoom.roomCode} | ${engine.getPlayerName(engine.settings.startingPlayer)}先手 | 红方 ${
+    onlineRoom.players.red ? '在线' : '空位'
+  } | 金方 ${
     onlineRoom.players.gold ? '在线' : '空位'
   } | 观战 ${onlineRoom.players.spectators}`;
   if (onlineRoom.pendingUndoRequest?.requester === onlineRoom.role) {
@@ -635,6 +644,7 @@ function readSettings(): GameSettings {
     obstaclesEnabled: obstaclesInput.checked,
     bombsEnabled: bombsInput.checked,
     gravityFlipEnabled: gravityFlipInput.checked,
+    startingPlayer: getStartingPlayerChoice(),
     matchMode,
     aiDifficulty:
       difficultySelect.value === 'hard' ? 'hard' : difficultySelect.value === 'easy' ? 'easy' : 'medium',
@@ -657,6 +667,7 @@ function syncSettingsToForm(settings: GameSettings): void {
   obstaclesInput.checked = settings.obstaclesEnabled;
   bombsInput.checked = settings.bombsEnabled;
   gravityFlipInput.checked = settings.gravityFlipEnabled;
+  setStartingPlayerChoice(settings.startingPlayer);
   modeSelect.value = settings.matchMode;
   difficultySelect.value = settings.aiDifficulty;
   difficultySelect.disabled = settings.matchMode !== 'ai';
@@ -666,6 +677,18 @@ function syncSettingsToForm(settings: GameSettings): void {
   totalTimerInput.checked = settings.totalTimerEnabled;
   totalMinutesInput.value = String(Math.round(settings.totalSeconds / 60));
   totalMinutesOutput.value = String(Math.round(settings.totalSeconds / 60));
+}
+
+function setStartingPlayerChoice(player: Player): void {
+  const isGold = player === 2;
+  redFirstBtn.classList.toggle('active', !isGold);
+  goldFirstBtn.classList.toggle('active', isGold);
+  redFirstBtn.setAttribute('aria-pressed', String(!isGold));
+  goldFirstBtn.setAttribute('aria-pressed', String(isGold));
+}
+
+function getStartingPlayerChoice(): Player {
+  return goldFirstBtn.classList.contains('active') ? 2 : 1;
 }
 
 function canUseBomb(player: Player): boolean {

@@ -35,6 +35,7 @@ export interface BoardOptions {
 }
 
 export interface GameSettings extends BoardOptions {
+  startingPlayer: Player;
   autoWinCheckEnabled: boolean;
   topologyPerspectiveEnabled: boolean;
   bombsEnabled: boolean;
@@ -127,6 +128,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   wrapVertical: false,
   obstaclesEnabled: false,
   obstacleCount: 2,
+  startingPlayer: 1,
   autoWinCheckEnabled: true,
   topologyPerspectiveEnabled: false,
   bombsEnabled: false,

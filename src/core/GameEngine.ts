@@ -62,7 +62,7 @@ export class GameEngine {
   reset(settings: Partial<GameSettings> = this.settings): void {
     this.settings = normalizeSettings({ ...this.settings, ...settings });
     this.board = new Board(this.settings);
-    this.currentPlayer = 1;
+    this.currentPlayer = this.settings.startingPlayer;
     this.status = 'playing';
     this.winner = null;
     this.winLine = [];
@@ -85,8 +85,9 @@ export class GameEngine {
     this.logEntries = [];
     this.moveSequence = 0;
     this.logSequence = 0;
-    this.appendLog('reset', undefined, '开局');
-    this.replayFrames = [this.createReplayFrame('开局')];
+    const openingLabel = `开局：${PLAYER_NAMES[this.currentPlayer]}先手`;
+    this.appendLog('reset', undefined, openingLabel);
+    this.replayFrames = [this.createReplayFrame(openingLabel)];
   }
 
   playColumn(col: number, mode: ActionMode): MoveOutcome {
@@ -353,7 +354,7 @@ export class GameEngine {
   }
 
   importState(state: SerializedGameState): void {
-    this.settings = { ...state.settings };
+    this.settings = normalizeSettings({ ...DEFAULT_SETTINGS, ...state.settings });
     this.board = new Board(this.settings);
     this.board.setMatrix(state.matrix);
     this.currentPlayer = state.currentPlayer;
@@ -702,6 +703,7 @@ function normalizeSettings(settings: GameSettings): GameSettings {
     ...settings,
     rows,
     cols,
+    startingPlayer: settings.startingPlayer === 2 ? 2 : 1,
     winLength: clampInt(settings.winLength, 3, maxWin),
     obstacleCount: clampInt(settings.obstacleCount, 1, Math.max(1, Math.floor((rows * cols) / 5))),
     turnSeconds: clampInt(settings.turnSeconds, 5, 60),
