@@ -7,6 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "dev:lan": "tsx server.ts",
     "build": "tsc && vite build",
+    "build:pages": "tsc && vite build --base /Gravity-Chess/",
+    "deploy": "npm run build:pages && gh-pages -d dist",
     "preview": "vite preview --host 127.0.0.1",
     "start:lan": "tsx server.ts --prod"
   },
@@ -19,6 +21,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "autoprefixer": "^10.4.20",
+    "gh-pages": "^6.3.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.22.4",

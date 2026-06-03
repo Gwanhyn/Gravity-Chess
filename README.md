@@ -92,6 +92,26 @@ npm run build
 npm run start:lan
 ```
 
+## GitHub Pages 部署
+
+仓库地址为 `Gwanhyn/Gravity-Chess` 时，GitHub Pages 的项目路径是 `/Gravity-Chess/`。
+
+本项目已经配置好 Pages 专用构建脚本：
+
+```bash
+npm run build:pages
+```
+
+确认构建成功后，可以发布到 `gh-pages` 分支：
+
+```bash
+npm run deploy
+```
+
+首次发布后，在 GitHub 仓库中进入 `Settings -> Pages`，将 Source 设为 `Deploy from a branch`，Branch 选择 `gh-pages`，目录选择 `/(root)`。
+
+注意：GitHub Pages 只托管静态文件。网页的本地双人和 AI 模式可以直接展示；局域网联机房间功能依赖 `server.ts` 提供的 Socket.IO 后端，不能仅靠 GitHub Pages 运行。
+
 ## 项目结构
 
 ```text
