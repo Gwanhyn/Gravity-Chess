@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.vite/
+*.log
+架构建议.md
+需求阐释.md

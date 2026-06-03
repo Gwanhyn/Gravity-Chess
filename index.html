@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>重力棋</title>
+    <script type="module" crossorigin src="/Gravity-Chess/assets/index-lHkBttSr.js"></script>
+    <link rel="stylesheet" crossorigin href="/Gravity-Chess/assets/index-BgfLZcx_.css">
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <aside class="panel panel-primary">
+        <header class="brand">
+          <div>
+            <p class="eyebrow">Gravity Chess</p>
+            <h1>重力棋</h1>
+          </div>
+          <div class="brand-actions">
+            <button id="settingsToggleBtn" class="icon-command subtle" type="button" title="设置">
+              <i data-lucide="settings"></i>
+            </button>
+            <div id="gravityBadge" class="gravity-badge" title="当前重力方向">
+              <i data-lucide="arrow-down"></i>
+            </div>
+          </div>
+        </header>
+
+        <section class="status-block">
+          <div class="player-token" id="currentToken"></div>
+          <div>
+            <p class="status-label">当前回合</p>
+            <p id="statusText" class="status-text">红方行动</p>
+          </div>
+        </section>
+
+        <section class="timer-grid" aria-label="计时器">
+          <div class="timer-card player-red">
+            <span>红方</span>
+            <strong id="redClock">--:--</strong>
+          </div>
+          <div class="timer-card player-gold">
+            <span>金方</span>
+            <strong id="goldClock">--:--</strong>
+          </div>
+          <div class="timer-card turn-clock">
+            <span>步时</span>
+            <strong id="turnClock">--</strong>
+          </div>
+        </section>
+
+        <section class="action-grid">
+          <button id="dropModeBtn" class="mode-btn active" type="button" title="普通落子">
+            <i data-lucide="circle-dot"></i>
+            <span>落子</span>
+          </button>
+          <button id="checkWinBtn" class="mode-btn" type="button" title="手动获胜检查">
+            <i data-lucide="badge-check"></i>
+            <span>查胜</span>
+          </button>
+          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹棋子">
+            <i data-lucide="bomb"></i>
+            <span>炸弹</span>
+          </button>
+          <button id="flipBtn" class="mode-btn" type="button" title="重力反转">
+            <i data-lucide="arrow-down-up"></i>
+            <span>反转</span>
+          </button>
+        </section>
+
+        <section class="command-row">
+          <button id="undoBtn" class="icon-command" type="button" title="悔棋">
+            <i data-lucide="undo-2"></i>
+          </button>
+          <button id="replayBtn" class="icon-command" type="button" title="复盘">
+            <i data-lucide="play"></i>
+          </button>
+          <button id="newGameBtn" class="icon-command primary" type="button" title="新对局">
+            <i data-lucide="refresh-cw"></i>
+          </button>
+        </section>
+
+        <section class="move-log" aria-label="棋谱">
+          <div class="section-head">
+            <h2>棋谱</h2>
+            <span id="moveCount">0</span>
+          </div>
+          <ol id="moveList"></ol>
+        </section>
+      </aside>
+
+      <main class="board-stage">
+        <div class="board-topline">
+          <div id="modeSummary" class="badge-row"></div>
+          <div id="winnerLine" class="winner-line"></div>
+        </div>
+        <div class="canvas-shell" id="canvasShell">
+          <canvas id="gameCanvas" aria-label="重力棋棋盘"></canvas>
+        </div>
+      </main>
+
+      <aside id="settingsDrawer" class="panel settings-panel settings-drawer">
+        <div class="drawer-head">
+          <div>
+            <p class="eyebrow">Match Setup</p>
+            <h2>设置</h2>
+          </div>
+          <button id="settingsCloseBtn" class="icon-command subtle" type="button" title="关闭设置">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <section>
+          <div class="section-head">
+            <h2>棋盘</h2>
+            <button id="applySettingsBtn" class="text-command" type="button">应用</button>
+          </div>
+          <div class="field-grid">
+            <label>
+              <span>行</span>
+              <input id="rowsInput" type="number" min="4" max="12" value="5" />
+            </label>
+            <label>
+              <span>列</span>
+              <input id="colsInput" type="number" min="4" max="12" value="7" />
+            </label>
+            <label>
+              <span>连珠</span>
+              <input id="winInput" type="number" min="3" max="8" value="4" />
+            </label>
+            <label>
+              <span>障碍</span>
+              <input id="obstacleCountInput" type="number" min="1" max="8" value="2" />
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>规则</h2>
+          </div>
+          <label class="toggle-row">
+            <span>左右联通</span>
+            <input id="wrapHorizontalInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>上下联通</span>
+            <input id="wrapVerticalInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>自动查胜</span>
+            <input id="autoWinCheckInput" type="checkbox" checked />
+          </label>
+          <label class="toggle-row">
+            <span>拓扑透视</span>
+            <input id="topologyPerspectiveInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>随机障碍</span>
+            <input id="obstaclesInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>炸弹棋子</span>
+            <input id="bombsInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>重力反转</span>
+            <input id="gravityFlipInput" type="checkbox" />
+          </label>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>对战</h2>
+          </div>
+          <label class="select-field">
+            <span>模式</span>
+            <select id="modeSelect">
+              <option value="local">本地双人</option>
+              <option value="ai">人机对战</option>
+            </select>
+          </label>
+          <label class="select-field">
+            <span>AI</span>
+            <select id="difficultySelect">
+              <option value="easy">简单</option>
+              <option value="medium">中等</option>
+              <option value="hard">困难</option>
+            </select>
+          </label>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>联机</h2>
+            <span id="onlineRoleBadge">离线</span>
+          </div>
+          <div class="online-box">
+            <p id="onlineStatus" class="online-status">本地模式</p>
+            <label class="select-field">
+              <span>房间码</span>
+              <input id="roomCodeInput" class="room-code-input" type="text" maxlength="4" placeholder="ABCD" />
+            </label>
+            <div class="online-actions">
+              <button id="hostRoomBtn" class="text-command" type="button">
+                <i data-lucide="wifi"></i>
+                <span>创建</span>
+              </button>
+              <button id="joinRoomBtn" class="text-command" type="button">
+                <i data-lucide="log-in"></i>
+                <span>加入</span>
+              </button>
+              <button id="leaveRoomBtn" class="text-command muted" type="button">
+                <i data-lucide="log-out"></i>
+                <span>离开</span>
+              </button>
+            </div>
+            <p id="shareUrl" class="share-url"></p>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>计时</h2>
+          </div>
+          <label class="toggle-row">
+            <span>单步限时</span>
+            <input id="turnTimerInput" type="checkbox" />
+          </label>
+          <label class="range-field">
+            <span>秒</span>
+            <input id="turnSecondsInput" type="range" min="5" max="60" value="20" />
+            <output id="turnSecondsOutput">20</output>
+          </label>
+          <label class="toggle-row">
+            <span>总时长</span>
+            <input id="totalTimerInput" type="checkbox" />
+          </label>
+          <label class="range-field">
+            <span>分</span>
+            <input id="totalMinutesInput" type="range" min="1" max="20" value="5" />
+            <output id="totalMinutesOutput">5</output>
+          </label>
+        </section>
+      </aside>
+    </div>
+
+    <div id="undoRequestDialog" class="undo-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="undoRequestTitle">
+      <div class="undo-dialog-card">
+        <p class="eyebrow">Undo Request</p>
+        <h2 id="undoRequestTitle">对方请求悔棋</h2>
+        <p id="undoRequestText" class="undo-request-text">是否同意回退上一步？</p>
+        <div class="undo-request-actions">
+          <button id="undoDeclineBtn" class="text-command muted" type="button">
+            <i data-lucide="x"></i>
+            <span>拒绝</span>
+          </button>
+          <button id="undoAcceptBtn" class="text-command" type="button">
+            <i data-lucide="check"></i>
+            <span>同意</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
