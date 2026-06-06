@@ -68,12 +68,12 @@ export class GameEngine {
     this.winLine = [];
     this.gravity = 'down';
     this.bombsLeft = {
-      1: this.settings.bombsEnabled ? 1 : 0,
-      2: this.settings.bombsEnabled ? 1 : 0
+      1: this.settings.bombsEnabled ? this.settings.bombLimit : 0,
+      2: this.settings.bombsEnabled ? this.settings.bombLimit : 0
     };
     this.flipsLeft = {
-      1: this.settings.gravityFlipEnabled ? 1 : 0,
-      2: this.settings.gravityFlipEnabled ? 1 : 0
+      1: this.settings.gravityFlipEnabled ? this.settings.gravityFlipLimit : 0,
+      2: this.settings.gravityFlipEnabled ? this.settings.gravityFlipLimit : 0
     };
     this.turnRemaining = this.settings.turnSeconds;
     this.totalRemaining = {
@@ -132,7 +132,7 @@ export class GameEngine {
   }
 
   useBomb(col: number): MoveOutcome {
-    if (!this.settings.bombsEnabled || this.bombsLeft[this.currentPlayer] <= 0) {
+    if (!this.settings.bombsEnabled || !hasRuleUseLeft(this.bombsLeft[this.currentPlayer])) {
       return { ok: false, message: '炸弹不可用' };
     }
 
@@ -149,9 +149,9 @@ export class GameEngine {
       return { ok: false, message: '该列无法投放炸弹' };
     }
 
-    this.bombsLeft[player] -= 1;
+    this.bombsLeft[player] = spendRuleUse(this.bombsLeft[player]);
     const win = this.settings.autoWinCheckEnabled ? this.board.scanForWinner(player) : null;
-    const label = `${PLAYER_NAMES[player]} 炸弹 ${col + 1}`;
+    const label = `${PLAYER_NAMES[player]} 炸弹3x3 ${col + 1}`;
     this.recordMove('bomb', player, label, result.center, result.removed);
     this.finishAction(win, player, true);
     this.replayFrames.push(this.createReplayFrame(label));
@@ -170,7 +170,7 @@ export class GameEngine {
     if (this.status !== 'playing') {
       return { ok: false, message: '对局已结束' };
     }
-    if (!this.settings.gravityFlipEnabled || this.flipsLeft[this.currentPlayer] <= 0) {
+    if (!this.settings.gravityFlipEnabled || !hasRuleUseLeft(this.flipsLeft[this.currentPlayer])) {
       return { ok: false, message: '重力反转不可用' };
     }
 
@@ -178,7 +178,7 @@ export class GameEngine {
     this.pushHistory();
     this.gravity = 'down';
     this.board.flipGravity(this.gravity);
-    this.flipsLeft[player] -= 1;
+    this.flipsLeft[player] = spendRuleUse(this.flipsLeft[player]);
 
     const win = this.settings.autoWinCheckEnabled ? this.board.scanForWinner(player) : null;
     const label = `${PLAYER_NAMES[player]} 反转`;
@@ -362,8 +362,18 @@ export class GameEngine {
     this.winner = state.winner;
     this.winLine = state.winLine.map((cell) => ({ ...cell }));
     this.gravity = state.gravity;
-    this.bombsLeft = { ...state.bombsLeft };
-    this.flipsLeft = { ...state.flipsLeft };
+    this.bombsLeft = state.bombsLeft
+      ? { ...state.bombsLeft }
+      : {
+          1: this.settings.bombsEnabled ? this.settings.bombLimit : 0,
+          2: this.settings.bombsEnabled ? this.settings.bombLimit : 0
+        };
+    this.flipsLeft = state.flipsLeft
+      ? { ...state.flipsLeft }
+      : {
+          1: this.settings.gravityFlipEnabled ? this.settings.gravityFlipLimit : 0,
+          2: this.settings.gravityFlipEnabled ? this.settings.gravityFlipLimit : 0
+        };
     this.turnRemaining = state.turnRemaining;
     this.totalRemaining = { ...state.totalRemaining };
     this.moves = state.moves.map((move) => ({
@@ -706,9 +716,24 @@ function normalizeSettings(settings: GameSettings): GameSettings {
     startingPlayer: settings.startingPlayer === 2 ? 2 : 1,
     winLength: clampInt(settings.winLength, 3, maxWin),
     obstacleCount: clampInt(settings.obstacleCount, 1, Math.max(1, Math.floor((rows * cols) / 5))),
+    bombLimit: normalizeRuleLimit(settings.bombLimit),
+    gravityFlipLimit: normalizeRuleLimit(settings.gravityFlipLimit),
     turnSeconds: clampInt(settings.turnSeconds, 5, 60),
     totalSeconds: clampInt(settings.totalSeconds, 60, 20 * 60)
   };
+}
+
+function normalizeRuleLimit(value: number): number {
+  if (value === -1) return -1;
+  return clampInt(value, 1, 9);
+}
+
+function hasRuleUseLeft(value: number): boolean {
+  return value === -1 || value > 0;
+}
+
+function spendRuleUse(value: number): number {
+  return value === -1 ? -1 : Math.max(0, value - 1);
 }
 
 function clampInt(value: number, min: number, max: number): number {

@@ -106,6 +106,7 @@ export class Board {
     if (row === null) return null;
 
     const removed: Position[] = [];
+    // Bombs clear the physical 3x3 landing area only; wrap links never expand the blast.
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
         const targetRow = row + dr;

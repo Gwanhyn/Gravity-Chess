@@ -39,7 +39,9 @@ export interface GameSettings extends BoardOptions {
   autoWinCheckEnabled: boolean;
   topologyPerspectiveEnabled: boolean;
   bombsEnabled: boolean;
+  bombLimit: number;
   gravityFlipEnabled: boolean;
+  gravityFlipLimit: number;
   matchMode: MatchMode;
   aiDifficulty: AiDifficulty;
   turnTimerEnabled: boolean;
@@ -132,7 +134,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   autoWinCheckEnabled: true,
   topologyPerspectiveEnabled: false,
   bombsEnabled: false,
+  bombLimit: 1,
   gravityFlipEnabled: false,
+  gravityFlipLimit: 1,
   matchMode: 'local',
   aiDifficulty: 'medium',
   turnTimerEnabled: false,
