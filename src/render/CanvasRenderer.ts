@@ -10,8 +10,6 @@ import type {
   ReplayFrame
 } from '../core/types';
 
-const PERSPECTIVE_REVEAL = 1 / 3;
-
 interface RenderContext {
   currentPlayer: Player;
   gravity: GravityDirection;
@@ -203,11 +201,10 @@ export class CanvasRenderer {
     this.canvas.height = Math.floor(height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const reserve = this.getPerspectiveReserve();
     const padding = Math.max(16, Math.min(width, height) * 0.04);
     const cell = Math.min(
-      (width - padding * 2) / (this.board.cols * (1 + reserve.x)),
-      (height - padding * 2) / (this.board.rows * (1 + reserve.y))
+      (width - padding * 2) / this.board.cols,
+      (height - padding * 2) / this.board.rows
     );
     const boardWidth = cell * this.board.cols;
     const boardHeight = cell * this.board.rows;
@@ -298,6 +295,7 @@ export class CanvasRenderer {
 
   private drawPerspectiveSlice(matrix: Cell[][], offsetX: number, offsetY: number): void {
     const clip = this.perspectiveClipRect(offsetX, offsetY);
+    if (clip.width <= 0 || clip.height <= 0) return;
     this.ctx.save();
     this.ctx.beginPath();
     this.ctx.rect(clip.x, clip.y, clip.width, clip.height);
@@ -551,43 +549,18 @@ export class CanvasRenderer {
   }
 
   private perspectiveClipRect(offsetX: number, offsetY: number): { x: number; y: number; width: number; height: number } {
-    const { originX, originY, boardWidth, boardHeight } = this.layout;
-    const revealWidth = boardWidth * PERSPECTIVE_REVEAL;
-    const revealHeight = boardHeight * PERSPECTIVE_REVEAL;
-
-    let x = originX;
-    let y = originY;
-    let width = boardWidth;
-    let height = boardHeight;
-
-    if (offsetX < 0) {
-      x = originX - revealWidth;
-      width = revealWidth;
-    } else if (offsetX > 0) {
-      x = originX + boardWidth;
-      width = revealWidth;
-    }
-
-    if (offsetY < 0) {
-      y = originY - revealHeight;
-      height = revealHeight;
-    } else if (offsetY > 0) {
-      y = originY + boardHeight;
-      height = revealHeight;
-    }
+    const { width: canvasWidth, height: canvasHeight, boardWidth, boardHeight } = this.layout;
+    const origin = this.boardOrigin(offsetX, offsetY);
+    const x = Math.max(0, origin.x);
+    const y = Math.max(0, origin.y);
+    const right = Math.min(canvasWidth, origin.x + boardWidth);
+    const bottom = Math.min(canvasHeight, origin.y + boardHeight);
 
     return {
       x,
       y,
-      width,
-      height
-    };
-  }
-
-  private getPerspectiveReserve(): { x: number; y: number } {
-    return {
-      x: PERSPECTIVE_REVEAL * 2,
-      y: PERSPECTIVE_REVEAL * 2
+      width: Math.max(0, right - x),
+      height: Math.max(0, bottom - y)
     };
   }
 
@@ -595,8 +568,13 @@ export class CanvasRenderer {
     const active = context.topologyPerspectiveEnabled && (context.wrapHorizontal || context.wrapVertical);
     if (!active) return [{ x: 0, y: 0 }];
 
-    const xs = context.wrapHorizontal ? [-1, 0, 1] : [0];
-    const ys = context.wrapVertical ? [-1, 0, 1] : [0];
+    const { width, height, originX, originY, boardWidth, boardHeight } = this.layout;
+    const left = Math.ceil(originX / boardWidth);
+    const right = Math.ceil((width - originX - boardWidth) / boardWidth);
+    const top = Math.ceil(originY / boardHeight);
+    const bottom = Math.ceil((height - originY - boardHeight) / boardHeight);
+    const xs = context.wrapHorizontal ? range(-left, right) : [0];
+    const ys = context.wrapVertical ? range(-top, bottom) : [0];
     const offsets: Array<{ x: number; y: number }> = [];
 
     for (const y of ys) {
@@ -645,4 +623,12 @@ function easeOutBounce(value: number): number {
   }
   const adjusted = value - 2.625 / d1;
   return n1 * adjusted * adjusted + 0.984375;
+}
+
+function range(start: number, end: number): number[] {
+  const values: number[] = [];
+  for (let value = start; value <= end; value += 1) {
+    values.push(value);
+  }
+  return values;
 }
