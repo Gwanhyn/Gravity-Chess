@@ -55,7 +55,7 @@
             <i data-lucide="badge-check"></i>
             <span>查胜</span>
           </button>
-          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹棋子">
+          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹：清除落点真实棋盘3x3范围内的棋子">
             <i data-lucide="bomb"></i>
             <span>炸弹</span>
           </button>
@@ -108,7 +108,7 @@
         </div>
         <section>
           <div class="section-head">
-            <h2>棋盘</h2>
+            <h2>基础设置</h2>
             <button id="applySettingsBtn" class="text-command" type="button">应用</button>
           </div>
           <div class="field-grid">
@@ -124,44 +124,15 @@
               <span>连珠</span>
               <input id="winInput" type="number" min="3" max="8" value="4" />
             </label>
-            <label>
-              <span>障碍</span>
-              <input id="obstacleCountInput" type="number" min="1" max="8" value="2" />
-            </label>
-          </div>
-        </section>
-
-        <section>
-          <div class="section-head">
-            <h2>规则</h2>
           </div>
           <label class="toggle-row">
-            <span>左右联通</span>
-            <input id="wrapHorizontalInput" type="checkbox" />
+            <span>步时</span>
+            <input id="turnTimerInput" type="checkbox" />
           </label>
-          <label class="toggle-row">
-            <span>上下联通</span>
-            <input id="wrapVerticalInput" type="checkbox" />
-          </label>
-          <label class="toggle-row">
-            <span>自动查胜</span>
-            <input id="autoWinCheckInput" type="checkbox" checked />
-          </label>
-          <label class="toggle-row">
-            <span>拓扑透视</span>
-            <input id="topologyPerspectiveInput" type="checkbox" />
-          </label>
-          <label class="toggle-row">
-            <span>随机障碍</span>
-            <input id="obstaclesInput" type="checkbox" />
-          </label>
-          <label class="toggle-row">
-            <span>炸弹棋子</span>
-            <input id="bombsInput" type="checkbox" />
-          </label>
-          <label class="toggle-row">
-            <span>重力反转</span>
-            <input id="gravityFlipInput" type="checkbox" />
+          <label id="turnTimerConfig" class="rule-config range-field">
+            <span>秒</span>
+            <input id="turnSecondsInput" type="range" min="5" max="60" value="20" />
+            <output id="turnSecondsOutput">20</output>
           </label>
         </section>
 
@@ -224,22 +195,61 @@
 
         <section>
           <div class="section-head">
-            <h2>计时</h2>
+            <h2>规则设置</h2>
           </div>
           <label class="toggle-row">
-            <span>单步限时</span>
-            <input id="turnTimerInput" type="checkbox" />
+            <span>左右联通</span>
+            <input id="wrapHorizontalInput" type="checkbox" />
           </label>
-          <label class="range-field">
-            <span>秒</span>
-            <input id="turnSecondsInput" type="range" min="5" max="60" value="20" />
-            <output id="turnSecondsOutput">20</output>
+          <label class="toggle-row">
+            <span>上下联通</span>
+            <input id="wrapVerticalInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>自动查胜</span>
+            <input id="autoWinCheckInput" type="checkbox" checked />
+          </label>
+          <label class="toggle-row">
+            <span>拓扑透视</span>
+            <input id="topologyPerspectiveInput" type="checkbox" />
+          </label>
+          <label class="toggle-row">
+            <span>随机障碍</span>
+            <input id="obstaclesInput" type="checkbox" />
+          </label>
+          <label id="obstacleConfig" class="rule-config select-field">
+            <span>障碍数量</span>
+            <input id="obstacleCountInput" type="number" min="1" max="8" value="2" />
+          </label>
+          <label class="toggle-row">
+            <span>炸弹棋子</span>
+            <input id="bombsInput" type="checkbox" />
+          </label>
+          <label id="bombLimitConfig" class="rule-config limit-field">
+            <span>炸弹次数</span>
+            <select id="bombLimitModeSelect">
+              <option value="limited">限制</option>
+              <option value="unlimited">不限</option>
+            </select>
+            <input id="bombLimitInput" type="number" min="1" max="9" value="1" />
+          </label>
+          <label class="toggle-row">
+            <span>重力反转</span>
+            <input id="gravityFlipInput" type="checkbox" />
+          </label>
+          <label id="gravityFlipLimitConfig" class="rule-config limit-field">
+            <span>反转次数</span>
+            <select id="gravityFlipLimitModeSelect">
+              <option value="limited">限制</option>
+              <option value="unlimited">不限</option>
+            </select>
+            <input id="gravityFlipLimitInput" type="number" min="1" max="9" value="1" />
           </label>
           <label class="toggle-row">
             <span>总时长</span>
             <input id="totalTimerInput" type="checkbox" />
           </label>
-          <label class="range-field">
+          <label id="totalTimerConfig" class="rule-config range-field">
             <span>分</span>
             <input id="totalMinutesInput" type="range" min="1" max="20" value="5" />
             <output id="totalMinutesOutput">5</output>
