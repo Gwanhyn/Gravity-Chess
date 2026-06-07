@@ -17,9 +17,9 @@
             <button id="settingsToggleBtn" class="icon-command subtle" type="button" title="设置">
               <i data-lucide="settings"></i>
             </button>
-            <div id="gravityBadge" class="gravity-badge" title="当前重力方向">
-              <i data-lucide="arrow-down"></i>
-            </div>
+            <button id="howToPlayBtn" class="icon-command help-command" type="button" title="玩法说明">
+              <i data-lucide="circle-help"></i>
+            </button>
           </div>
         </header>
 
@@ -256,6 +256,87 @@
           </label>
         </section>
       </aside>
+    </div>
+
+    <div id="howToPlayDialog" class="how-to-dialog hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="howToPlayTitle">
+      <div class="how-to-card">
+        <header class="how-to-head">
+          <div>
+            <p class="eyebrow">Gravity Chess Guide</p>
+            <h2 id="howToPlayTitle">玩法说明</h2>
+          </div>
+          <button id="howToPlayCloseBtn" class="icon-command subtle" type="button" title="关闭玩法说明">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+
+        <div class="how-to-content">
+          <section class="how-to-intro">
+            <h3>🎯 重力棋 (Gravity Chess)</h3>
+            <p>
+              欢迎来到重力棋！这是一款在经典“四子棋”基础上，加入物理重力、空间折叠与心机博弈的变体对战游戏。
+            </p>
+          </section>
+
+          <section class="how-to-section">
+            <h3>🚩 基础获胜目标</h3>
+            <ul>
+              <li>双方轮流选择某一列落子，棋子会受<strong>重力影响</strong>自然下落并堆叠。</li>
+              <li>率先在横、竖、左斜或右斜方向上达成<strong>连珠</strong>的一方获胜，默认目标是 4 子。</li>
+            </ul>
+          </section>
+
+          <section class="how-to-section">
+            <h3>🌟 特色机制与博弈</h3>
+            <article>
+              <h4>1. 🌌 空间联通与拓扑透视</h4>
+              <p>如果房主开启联通模式，棋盘的边界将被打破。</p>
+              <ul>
+                <li><strong>左右联通</strong>：最左与最右相连，可以跨越左右边界完成连珠。</li>
+                <li><strong>上下联通</strong>：顶端与底端相连，棋路会变得更加反直觉。</li>
+                <li><strong>拓扑透视</strong>：主棋盘四周出现半透明镜像棋盘；你只能在中央主棋盘落子，镜像仅用于观察跨边界局势。</li>
+              </ul>
+            </article>
+
+            <article>
+              <h4>2. 🕵️‍♂️ 手动查胜</h4>
+              <p>关闭“自动查胜”后，系统不会主动宣布游戏结束。</p>
+              <ul>
+                <li>你必须在<strong>自己的回合</strong>主动点击【查胜】。</li>
+                <li>如果已经连珠，点击后立刻获胜。</li>
+                <li>如果看错了，不仅查胜失败，还会<strong>白白浪费掉这一回合</strong>。</li>
+                <li>查胜只检查点击者是否连珠，<strong>不会提醒对手</strong>。</li>
+              </ul>
+            </article>
+
+            <article>
+              <h4>3. 🙃 重力反转</h4>
+              <p>
+                开启后，每人每局默认有 1 次发动机会。发动时整个棋盘上下颠倒，所有棋子和障碍物会向相反方向坠落并重新堆叠。
+              </p>
+            </article>
+
+            <article>
+              <h4>4. 💣 炸弹与障碍</h4>
+              <ul>
+                <li><strong>炸弹棋子</strong>：落入后不参与连珠，而是炸毁落点周围真实棋盘 <strong>3 × 3</strong> 范围内的所有棋子。</li>
+                <li><strong>随机障碍</strong>：棋盘上会随机出现不可消除、不可跨越的死块，极其考验局部布局能力。</li>
+              </ul>
+            </article>
+          </section>
+
+          <section class="how-to-section">
+            <h3>🌐 局域网联机指南</h3>
+            <ol>
+              <li><strong>房主建房</strong>：在联机区域点击【创建】，获取 4 位房间码。</li>
+              <li><strong>好友加入</strong>：好友连上同一个 Wi-Fi，用浏览器打开房主提示的局域网 IP 地址，输入房间码点击【加入】。</li>
+              <li><strong>悔棋申请</strong>：联机悔棋需要向对方发送申请，对方同意后才会回退。</li>
+            </ol>
+          </section>
+
+          <p class="how-to-close-note">准备好让你的大脑在重力与空间中燃烧了吗？关掉说明，开始对局。</p>
+        </div>
+      </div>
     </div>
 
     <div id="undoRequestDialog" class="undo-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="undoRequestTitle">

@@ -1,10 +1,9 @@
 import {
-  ArrowDown,
   ArrowDownUp,
-  ArrowUp,
   BadgeCheck,
   Bomb,
   Check,
+  CircleHelp,
   CircleDot,
   createIcons,
   LogIn,
@@ -48,6 +47,7 @@ let pendingRemoteOutcome: MoveOutcome | null = null;
 let settingsPreview: GameSettings | null = null;
 let settingsPreviewBoard: Board | null = null;
 let settingsDirty = false;
+let previousDialogFocus: HTMLElement | null = null;
 
 const canvas = query<HTMLCanvasElement>('#gameCanvas');
 const canvasShell = query<HTMLElement>('#canvasShell');
@@ -70,7 +70,6 @@ const statusText = query<HTMLElement>('#statusText');
 const redClock = query<HTMLElement>('#redClock');
 const goldClock = query<HTMLElement>('#goldClock');
 const turnClock = query<HTMLElement>('#turnClock');
-const gravityBadge = query<HTMLElement>('#gravityBadge');
 const modeSummary = query<HTMLElement>('#modeSummary');
 const winnerLine = query<HTMLElement>('#winnerLine');
 const moveCount = query<HTMLElement>('#moveCount');
@@ -116,6 +115,9 @@ const shareUrl = query<HTMLElement>('#shareUrl');
 const settingsDrawer = query<HTMLElement>('#settingsDrawer');
 const settingsToggleBtn = query<HTMLButtonElement>('#settingsToggleBtn');
 const settingsCloseBtn = query<HTMLButtonElement>('#settingsCloseBtn');
+const howToPlayBtn = query<HTMLButtonElement>('#howToPlayBtn');
+const howToPlayDialog = query<HTMLElement>('#howToPlayDialog');
+const howToPlayCloseBtn = query<HTMLButtonElement>('#howToPlayCloseBtn');
 const undoRequestDialog = query<HTMLElement>('#undoRequestDialog');
 const undoRequestTitle = query<HTMLElement>('#undoRequestTitle');
 const undoRequestText = query<HTMLElement>('#undoRequestText');
@@ -131,12 +133,11 @@ const replayBtn = query<HTMLButtonElement>('#replayBtn');
 const newGameBtn = query<HTMLButtonElement>('#newGameBtn');
 const applySettingsBtn = query<HTMLButtonElement>('#applySettingsBtn');
 const lucideIcons = {
-  ArrowDown,
-  ArrowUp,
   ArrowDownUp,
   BadgeCheck,
   Bomb,
   Check,
+  CircleHelp,
   CircleDot,
   LogIn,
   LogOut,
@@ -237,6 +238,18 @@ function wireEvents(): void {
     setSettingsDrawer(!(isOpen && !settingsDirty));
   });
   settingsCloseBtn.addEventListener('click', () => setSettingsDrawer(false));
+  howToPlayBtn.addEventListener('click', () => setHowToPlayDialog(true));
+  howToPlayCloseBtn.addEventListener('click', () => setHowToPlayDialog(false));
+  howToPlayDialog.addEventListener('click', (event) => {
+    if (event.target === howToPlayDialog) {
+      setHowToPlayDialog(false);
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !howToPlayDialog.classList.contains('hidden')) {
+      setHowToPlayDialog(false);
+    }
+  });
   undoAcceptBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-accept' }));
   undoDeclineBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-decline' }));
 
@@ -514,6 +527,21 @@ function setSettingsDrawer(open: boolean): void {
   updateUI();
 }
 
+function setHowToPlayDialog(open: boolean): void {
+  howToPlayDialog.classList.toggle('hidden', !open);
+  howToPlayDialog.setAttribute('aria-hidden', String(!open));
+
+  if (open) {
+    previousDialogFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    howToPlayCloseBtn.focus();
+    return;
+  }
+
+  const focusTarget = previousDialogFocus ?? howToPlayBtn;
+  previousDialogFocus = null;
+  focusTarget.focus();
+}
+
 function emitOnlineAction(action: Parameters<ClientToServerEvents['game:action']>[0]): void {
   if (!socket || !onlineRoom) {
     updateUI('尚未加入房间');
@@ -577,14 +605,12 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   const currentPlayer = replayFrame?.currentPlayer ?? engine.currentPlayer;
   const status = replayFrame?.status ?? engine.status;
   const winner = replayFrame?.winner ?? engine.winner;
-  const gravity = replayFrame?.gravity ?? engine.gravity;
   const winLine = replayFrame?.winLine ?? engine.winLine;
   const visualSettings = getVisualSettings();
   const visualBoard = settingsPreviewBoard ?? engine.board;
 
   document.documentElement.style.setProperty('--board-aspect', `${visualBoard.cols} / ${visualBoard.rows}`);
   currentToken.className = `player-token ${currentPlayer === 1 ? 'red' : 'gold'}`;
-  gravityBadge.innerHTML = `<i data-lucide="${gravity === 'down' ? 'arrow-down' : 'arrow-up'}"></i>`;
 
   if (message) {
     statusText.textContent = message;
