@@ -985,7 +985,7 @@ button:focus-visible {
 }
 
 .how-to-intro {
-  padding: 14px;
+  padding: 12px !important; /* to be optimize (delete the 'important' and use the correct and similar construction) */
   background: linear-gradient(135deg, rgba(17, 169, 155, 0.16), rgba(239, 71, 111, 0.08));
   border: 1px solid rgba(141, 219, 212, 0.2);
   border-radius: 8px;
