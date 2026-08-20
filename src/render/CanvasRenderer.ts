@@ -260,14 +260,8 @@ export class CanvasRenderer implements GameRenderer {
 
   private drawBackground(scoreSkew: number): void {
     const { width, height } = this.layout;
-    const blueAlpha = Math.max(0, scoreSkew) * 0.16;
-    const amberAlpha = Math.max(0, -scoreSkew) * 0.16;
-
-    const gradient = this.ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, `rgba(29, 93, 165, ${0.22 + blueAlpha})`);
-    gradient.addColorStop(0.5, 'rgba(13, 25, 32, 0.98)');
-    gradient.addColorStop(1, `rgba(139, 91, 23, ${0.18 + amberAlpha})`);
-    this.ctx.fillStyle = gradient;
+    // Keep the playfield quiet so the board and pieces carry the color hierarchy.
+    this.ctx.fillStyle = '#0b151c';
     this.ctx.fillRect(0, 0, width, height);
 
     this.ctx.save();

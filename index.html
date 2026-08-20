@@ -135,19 +135,19 @@
           <button id="newGameBtn" class="action-command primary" type="button" title="新对局"><i data-lucide="refresh-cw"></i><span>新局</span></button>
         </section>
 
-        <section class="secondary-actions" aria-label="特殊操作">
+        <section class="secondary-actions" aria-label="辅助操作">
           <button id="dropModeBtn" class="mode-btn active" type="button" title="普通落子"><i data-lucide="circle-dot"></i><span>落子</span></button>
           <button id="checkWinBtn" class="mode-btn" type="button" title="手动检查胜利"><i data-lucide="badge-check"></i><span>查胜</span></button>
-          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹棋子"><i data-lucide="bomb"></i><span>炸弹</span></button>
-          <button id="flipBtn" class="mode-btn" type="button" title="重力反转"><i data-lucide="arrow-down-up"></i><span>反转</span></button>
+          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹棋子" hidden><i data-lucide="bomb"></i><span>炸弹</span></button>
+          <button id="flipBtn" class="mode-btn" type="button" title="重力反转" hidden><i data-lucide="arrow-down-up"></i><span>反转</span></button>
         </section>
 
-        <section id="moveLogSection" class="move-log" aria-label="棋谱">
+        <section id="moveLogSection" class="move-log collapsed" aria-label="棋谱">
           <div class="section-head">
-            <button id="moveLogToggle" class="section-toggle" type="button" aria-expanded="true">
+            <button id="moveLogToggle" class="section-toggle" type="button" aria-expanded="false">
               <span>棋谱</span>
               <small><b id="moveCount">0</b> 手</small>
-              <i data-lucide="chevron-up"></i>
+              <i data-lucide="chevron-down"></i>
             </button>
           </div>
           <ol id="moveList"></ol>
@@ -220,7 +220,7 @@
           <p id="shareUrl" class="share-url"></p>
         </section>
 
-        <details class="advanced-settings">
+        <details class="advanced-settings" hidden>
           <summary>实验规则</summary>
           <div class="advanced-settings-body">
             <label class="toggle-row"><span>随机障碍</span><input id="obstaclesInput" type="checkbox" /></label>

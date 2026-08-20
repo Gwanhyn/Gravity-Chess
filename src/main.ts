@@ -241,7 +241,7 @@ function wireEvents(): void {
   });
 
   checkWinBtn.addEventListener('click', async () => {
-    if (renderMode === '3d' || inputLocked || replaying || !canActLocally()) return;
+    if (inputLocked || replaying || !canActLocally()) return;
     await performManualCheck();
   });
 
@@ -451,7 +451,6 @@ async function performFlip(): Promise<void> {
 }
 
 async function performManualCheck(): Promise<void> {
-  if (renderMode === '3d') return;
   if (isOnline()) {
     emitOnlineAction({ kind: 'check' });
     return;
@@ -573,6 +572,10 @@ function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
     onlineRoom = payload;
     pendingRemoteOutcome = payload.outcome ?? null;
     engine.importState(payload.state);
+    // Keep legacy experimental flags inert for normal matches, including reconnects.
+    engine.settings.obstaclesEnabled = false;
+    engine.settings.bombsEnabled = false;
+    engine.settings.gravityFlipEnabled = false;
     engine.settings.topologyPerspectiveEnabled = topologyPerspectivePreference;
     saveStoredSettings(engine.settings);
     replayFrameIndex = null;
@@ -722,7 +725,6 @@ function getThreeModeRestriction(settings: GameSettings): string | null {
   if (settings.obstaclesEnabled) return '障碍规则开启时';
   if (settings.bombsEnabled) return '炸弹规则开启时';
   if (settings.gravityFlipEnabled) return '重力反转开启时';
-  if (!settings.autoWinCheckEnabled) return '手动查胜开启时';
   if (settings.topologyPerspectiveEnabled && (settings.wrapHorizontal || settings.wrapVertical)) {
     return '拓扑透视开启时';
   }
@@ -753,7 +755,6 @@ function updateThreeControlAvailability(settings: GameSettings): void {
   const topologyRestricted = threeActive && Boolean(settings.topologyPerspectiveEnabled) &&
     (settings.wrapHorizontal || settings.wrapVertical);
   const controls: Array<[HTMLInputElement | HTMLSelectElement, string]> = [
-    [autoWinCheckInput, '手动查胜需要切换到 2D'],
     [obstaclesInput, '障碍规则需要切换到 2D'],
     [obstacleCountInput, '障碍规则需要切换到 2D'],
     [bombsInput, '炸弹规则需要切换到 2D'],
@@ -963,7 +964,6 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   checkWinBtn.title = `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
   const hasPendingUndo = Boolean(onlineRoom?.pendingUndoRequest);
   checkWinBtn.disabled =
-    renderMode === '3d' ||
     engine.settings.autoWinCheckEnabled ||
     settingsDirty ||
     inputLocked ||
@@ -990,9 +990,7 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   replayBtn.innerHTML = `<i data-lucide="${replaying ? 'x' : 'play'}"></i>`;
   dropModeBtn.disabled =
     settingsDirty || inputLocked || replaying || hasPendingUndo || !canActLocally() || status !== 'playing';
-  checkWinBtn.title = renderMode === '3d'
-    ? '手动查胜需要切换到 2D'
-    : `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
+  checkWinBtn.title = `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
   applySettingsBtn.disabled =
     (isOnline() && !onlineRoom?.isHost) ||
     !settingsDirty ||
@@ -1059,7 +1057,7 @@ function renderSummary(): void {
 
 function renderMoves(): void {
   moveCount.textContent = String(engine.logEntries.length);
-  const recent = engine.logEntries.slice(-80).reverse();
+  const recent = engine.logEntries.slice(-8).reverse();
   moveList.innerHTML = recent
     .map((entry) => {
       const marker = entry.player === 1 ? 'blue-dot' : entry.player === 2 ? 'yellow-dot' : 'neutral-dot';
@@ -1367,10 +1365,10 @@ function readSettings(): GameSettings {
     wrapVertical: wrapVerticalInput.checked,
     autoWinCheckEnabled: autoWinCheckInput.checked,
     topologyPerspectiveEnabled: topologyPerspectiveInput.checked,
-    obstaclesEnabled: obstaclesInput.checked,
-    bombsEnabled: bombsInput.checked,
+    obstaclesEnabled: false,
+    bombsEnabled: false,
     bombLimit: readRuleLimit(bombLimitModeSelect, bombLimitInput, engine.settings.bombLimit),
-    gravityFlipEnabled: gravityFlipInput.checked,
+    gravityFlipEnabled: false,
     gravityFlipLimit: readRuleLimit(
       gravityFlipLimitModeSelect,
       gravityFlipLimitInput,
@@ -1492,7 +1490,13 @@ function loadStoredSettings(): GameSettings {
     const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<GameSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      obstaclesEnabled: false,
+      bombsEnabled: false,
+      gravityFlipEnabled: false
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }

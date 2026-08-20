@@ -300,7 +300,7 @@ class ShowcaseBoard {
           } else {
             this.currentPhase = 'WAITING';
             this.phaseStarted = now;
-            this.nextSpawnAt = now + this.randomBetween(0.72, 1.15);
+            this.nextSpawnAt = now + this.randomBetween(0.52, 0.88);
           }
         }
         break;
@@ -313,7 +313,7 @@ class ShowcaseBoard {
       case 'STABILIZING':
         if (now - this.phaseStarted >= 0.34) {
           this.currentPhase = 'WAITING';
-          this.nextSpawnAt = now + this.randomBetween(0.38, 0.66);
+          this.nextSpawnAt = now + this.randomBetween(0.34, 0.58);
         }
         break;
       case 'WON': this.updateVictory(now); break;
