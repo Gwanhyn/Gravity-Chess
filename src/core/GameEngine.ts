@@ -19,8 +19,8 @@ import {
 } from './types';
 
 const PLAYER_NAMES: Record<Player, string> = {
-  1: '红方',
-  2: '金方'
+  1: '蓝方',
+  2: '黄方'
 };
 
 const DIRECTIONS: Position[] = [
@@ -29,6 +29,47 @@ const DIRECTIONS: Position[] = [
   { row: 1, col: 1 },
   { row: 1, col: -1 }
 ];
+
+const AI_WIN_SCORE = 1_000_000;
+
+interface AiProfile {
+  maxDepth: number;
+  maxCandidates: number;
+  timeLimitMs: number;
+  randomJitter: number;
+}
+
+interface SearchContext {
+  deadline: number;
+  maxCandidates: number;
+  nodes: number;
+  cacheHits: number;
+  table: Map<string, SearchCacheEntry>;
+  aborted: boolean;
+}
+
+interface SearchCacheEntry {
+  depth: number;
+  value: number;
+  bound: 'exact' | 'lower' | 'upper';
+}
+
+interface SearchResult {
+  move: number;
+  score: number;
+  depth: number;
+  complete: boolean;
+  nodes: number;
+  cacheHits: number;
+}
+
+export interface AiDiagnostics {
+  difficulty: AiDifficulty;
+  elapsedMs: number;
+  nodes: number;
+  cacheHits: number;
+  depth: number;
+}
 
 export class GameEngine {
   board: Board;
@@ -52,6 +93,13 @@ export class GameEngine {
 
   private moveSequence = 0;
   private logSequence = 0;
+  private lastAiDiagnostics: AiDiagnostics = {
+    difficulty: 'medium',
+    elapsedMs: 0,
+    nodes: 0,
+    cacheHits: 0,
+    depth: 0
+  };
 
   constructor(settings: Partial<GameSettings> = {}) {
     this.settings = normalizeSettings({ ...DEFAULT_SETTINGS, ...settings });
@@ -88,6 +136,16 @@ export class GameEngine {
     const openingLabel = `开局：${PLAYER_NAMES[this.currentPlayer]}先手`;
     this.appendLog('reset', undefined, openingLabel);
     this.replayFrames = [this.createReplayFrame(openingLabel)];
+  }
+
+  setTopology(wrapHorizontal: boolean, wrapVertical: boolean): void {
+    this.settings.wrapHorizontal = wrapHorizontal;
+    this.settings.wrapVertical = wrapVertical;
+    this.board.updateOptions({
+      winLength: this.settings.winLength,
+      wrapHorizontal,
+      wrapVertical
+    });
   }
 
   playColumn(col: number, mode: ActionMode): MoveOutcome {
@@ -292,22 +350,42 @@ export class GameEngine {
 
     const columns = this.board.getAvailableColumns(this.gravity);
     if (columns.length === 0) return null;
-
-    if (this.settings.aiDifficulty === 'easy') {
-      return this.pickRandom(columns);
-    }
-
+    const startedAt = Date.now();
+    const difficulty = this.settings.aiDifficulty;
     const winNow = this.findImmediateMove(this.board, 2);
-    if (winNow !== null) return winNow;
-
     const blockNow = this.findImmediateMove(this.board, 1);
-    if (blockNow !== null) return blockNow;
+    let move: number;
+    let nodes = 0;
+    let cacheHits = 0;
+    let depth = 0;
 
-    if (this.settings.aiDifficulty === 'medium') {
-      return this.pickWeighted(columns);
+    if (winNow !== null) {
+      move = winNow;
+    } else if (blockNow !== null) {
+      move = blockNow;
+    } else if (difficulty === 'easy') {
+      move = this.pickEasyMove(columns);
+    } else {
+      const profile = this.getAiProfile(difficulty);
+      const result = this.pickSearchMove(columns, profile);
+      move = result.move;
+      nodes = result.nodes;
+      cacheHits = result.cacheHits;
+      depth = result.depth;
     }
 
-    return this.pickMinimax(columns);
+    this.lastAiDiagnostics = {
+      difficulty,
+      elapsedMs: Date.now() - startedAt,
+      nodes,
+      cacheHits,
+      depth
+    };
+    return move;
+  }
+
+  getLastAiDiagnostics(): AiDiagnostics {
+    return { ...this.lastAiDiagnostics };
   }
 
   getScoreSkew(): number {
@@ -533,117 +611,218 @@ export class GameEngine {
   }
 
   private findImmediateMove(board: Board, player: Player): number | null {
+    const wins: number[] = [];
     for (const col of board.getAvailableColumns(this.gravity)) {
       const copy = board.clone();
       const position = copy.dropPiece(col, player, this.gravity);
       if (position && copy.checkWin(position.row, position.col)) {
-        return col;
+        wins.push(col);
       }
     }
-    return null;
+    if (wins.length === 0) return null;
+    const center = (board.cols - 1) / 2;
+    return wins.sort((left, right) => Math.abs(left - center) - Math.abs(right - center))[0];
   }
 
-  private pickRandom(columns: number[]): number {
-    return columns[Math.floor(Math.random() * columns.length)];
+  private getAiProfile(difficulty: AiDifficulty): AiProfile {
+    const cellCount = this.board.rows * this.board.cols;
+    if (difficulty === 'medium') {
+      return {
+        maxDepth: cellCount <= 54 ? 3 : 2,
+        maxCandidates: Math.min(this.board.cols, cellCount <= 72 ? 7 : 6),
+        timeLimitMs: 72,
+        randomJitter: 24
+      };
+    }
+
+    return {
+      maxDepth: cellCount <= 42 ? 6 : cellCount <= 72 ? 5 : 4,
+      maxCandidates: Math.min(this.board.cols, cellCount <= 72 ? 8 : 7),
+      timeLimitMs: cellCount <= 54 ? 180 : 145,
+      randomJitter: 0
+    };
   }
 
-  private pickWeighted(columns: number[]): number {
-    const center = (this.board.cols - 1) / 2;
-    const weighted = columns
-      .map((col) => ({
-        col,
-        score: 1 / (Math.abs(col - center) + 1) + Math.random() * 0.2
-      }))
-      .sort((a, b) => b.score - a.score);
-    return weighted[0].col;
+  private pickEasyMove(columns: number[]): number {
+    const ranked = this.rankColumns(this.board, 2, columns.length);
+    const poolSize = Math.min(ranked.length, Math.max(3, Math.ceil(columns.length * 0.6)));
+    const pool = ranked.slice(0, poolSize);
+    return pool[Math.floor(Math.random() * pool.length)].col;
   }
 
-  private pickMinimax(columns: number[]): number {
-    const depth = this.board.rows * this.board.cols > 72 ? 3 : 4;
+  private pickSearchMove(columns: number[], profile: AiProfile): SearchResult {
+    const ranked = this.rankColumns(this.board, 2, profile.maxCandidates);
+    const fallback = ranked[0]?.col ?? columns[0];
+    const context: SearchContext = {
+      deadline: Date.now() + profile.timeLimitMs,
+      maxCandidates: profile.maxCandidates,
+      nodes: 0,
+      cacheHits: 0,
+      table: new Map(),
+      aborted: false
+    };
+    let best: SearchResult = {
+      move: fallback,
+      score: Number.NEGATIVE_INFINITY,
+      depth: 0,
+      complete: false,
+      nodes: 0,
+      cacheHits: 0
+    };
+
+    for (let depth = 1; depth <= profile.maxDepth; depth += 1) {
+      const iteration = this.searchRoot(ranked, depth, context, profile.randomJitter);
+      if (!iteration.complete) break;
+      best = iteration;
+      if (this.isSearchExpired(context)) break;
+    }
+
+    return {
+      ...best,
+      nodes: context.nodes,
+      cacheHits: context.cacheHits
+    };
+  }
+
+  private searchRoot(
+    candidates: Array<{ col: number; score: number }>,
+    depth: number,
+    context: SearchContext,
+    randomJitter: number
+  ): SearchResult {
+    let bestMove = candidates[0].col;
     let bestScore = Number.NEGATIVE_INFINITY;
-    let bestColumns: number[] = [];
+    let alpha = Number.NEGATIVE_INFINITY;
 
-    for (const col of columns) {
-      const copy = this.board.clone();
-      const position = copy.dropPiece(col, 2, this.gravity);
-      if (!position) continue;
-
-      const immediateWin = copy.checkWin(position.row, position.col);
-      const score = immediateWin
-        ? 100_000
-        : this.minimax(copy, depth - 1, 1, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestColumns = [col];
-      } else if (score === bestScore) {
-        bestColumns.push(col);
+    for (const candidate of candidates) {
+      if (this.isSearchExpired(context)) {
+        return { move: bestMove, score: bestScore, depth, complete: false, nodes: 0, cacheHits: 0 };
       }
+
+      const copy = this.board.clone();
+      const position = copy.dropPiece(candidate.col, 2, this.gravity);
+      if (!position) continue;
+      const win = copy.checkWin(position.row, position.col);
+      const score = win
+        ? AI_WIN_SCORE + depth
+        : this.search(copy, depth - 1, 1, alpha, Number.POSITIVE_INFINITY, context);
+      if (context.aborted) {
+        return { move: bestMove, score: bestScore, depth, complete: false, nodes: 0, cacheHits: 0 };
+      }
+
+      const comparisonScore = score + (Math.random() - 0.5) * randomJitter;
+      const currentComparison = bestScore + (Math.random() - 0.5) * randomJitter;
+      if (comparisonScore > currentComparison) {
+        bestMove = candidate.col;
+        bestScore = score;
+      }
+      alpha = Math.max(alpha, bestScore);
     }
 
-    return this.pickWeighted(bestColumns.length ? bestColumns : columns);
+    return { move: bestMove, score: bestScore, depth, complete: true, nodes: 0, cacheHits: 0 };
   }
 
-  private minimax(board: Board, depth: number, player: Player, alpha: number, beta: number): number {
-    const win = board.scanForWinner(player);
-    if (win) {
-      return win.player === 2 ? 100_000 + depth : -100_000 - depth;
+  private search(
+    board: Board,
+    depth: number,
+    player: Player,
+    alpha: number,
+    beta: number,
+    context: SearchContext
+  ): number {
+    context.nodes += 1;
+    if (this.isSearchExpired(context)) return this.scoreBoard(board);
+    if (depth <= 0 || board.isDraw(this.gravity)) return this.scoreBoard(board);
+
+    const key = this.getBoardKey(board, player);
+    const cached = context.table.get(key);
+    const alphaStart = alpha;
+    const betaStart = beta;
+    if (cached && cached.depth >= depth) {
+      context.cacheHits += 1;
+      if (cached.bound === 'exact') return cached.value;
+      if (cached.bound === 'lower') alpha = Math.max(alpha, cached.value);
+      if (cached.bound === 'upper') beta = Math.min(beta, cached.value);
+      if (alpha >= beta) return cached.value;
     }
 
-    if (depth === 0 || board.isDraw(this.gravity)) {
-      return this.scoreBoard(board);
-    }
+    const candidates = this.rankColumns(board, player, context.maxCandidates);
+    if (candidates.length === 0) return this.scoreBoard(board);
 
-    const columns = board.getAvailableColumns(this.gravity);
-    if (player === 2) {
-      let value = Number.NEGATIVE_INFINITY;
-      for (const col of columns) {
-        const copy = board.clone();
-        const position = copy.dropPiece(col, player, this.gravity);
-        if (!position) continue;
-        const child = this.minimax(copy, depth - 1, 1, alpha, beta);
+    const maximizing = player === 2;
+    let value = maximizing ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+    for (const candidate of candidates) {
+      if (this.isSearchExpired(context)) return this.scoreBoard(board);
+      const copy = board.clone();
+      const position = copy.dropPiece(candidate.col, player, this.gravity);
+      if (!position) continue;
+      const win = copy.checkWin(position.row, position.col);
+      const child = win
+        ? (player === 2 ? AI_WIN_SCORE + depth : -AI_WIN_SCORE - depth)
+        : this.search(copy, depth - 1, otherPlayer(player), alpha, beta, context);
+      if (context.aborted) return this.scoreBoard(board);
+
+      if (maximizing) {
         value = Math.max(value, child);
         alpha = Math.max(alpha, value);
-        if (alpha >= beta) break;
+      } else {
+        value = Math.min(value, child);
+        beta = Math.min(beta, value);
       }
-      return value;
+      if (alpha >= beta) break;
     }
 
-    let value = Number.POSITIVE_INFINITY;
-    for (const col of columns) {
-      const copy = board.clone();
-      const position = copy.dropPiece(col, player, this.gravity);
-      if (!position) continue;
-      const child = this.minimax(copy, depth - 1, 2, alpha, beta);
-      value = Math.min(value, child);
-      beta = Math.min(beta, value);
-      if (alpha >= beta) break;
+    if (!context.aborted) {
+      const bound: SearchCacheEntry['bound'] =
+        value <= alphaStart ? 'upper' : value >= betaStart ? 'lower' : 'exact';
+      context.table.set(key, { depth, value, bound });
     }
     return value;
   }
 
-  private scoreBoard(board: Board): number {
-    const aiWin = board.scanForWinner(2);
-    if (aiWin?.player === 2) return 100_000;
-    const humanWin = board.scanForWinner(1);
-    if (humanWin?.player === 1) return -100_000;
-
+  private rankColumns(board: Board, player: Player, limit: number): Array<{ col: number; score: number }> {
     const center = (board.cols - 1) / 2;
-    let centerScore = 0;
-    for (let row = 0; row < board.rows; row += 1) {
-      for (let col = 0; col < board.cols; col += 1) {
-        const cell = board.matrix[row][col];
-        if (cell === 2) centerScore += 4 - Math.abs(col - center);
-        if (cell === 1) centerScore -= 3 - Math.abs(col - center);
-      }
-    }
-
-    return this.threatScore(board, 2) - this.threatScore(board, 1) * 1.15 + centerScore;
+    const ranked = board.getAvailableColumns(this.gravity).map((col) => {
+      const copy = board.clone();
+      const position = copy.dropPiece(col, player, this.gravity);
+      if (!position) return { col, score: Number.NEGATIVE_INFINITY };
+      const win = copy.checkWin(position.row, position.col);
+      const boardScore = win
+        ? player === 2 ? AI_WIN_SCORE : -AI_WIN_SCORE
+        : this.scoreBoard(copy);
+      const perspectiveScore = player === 2 ? boardScore : -boardScore;
+      return {
+        col,
+        score: perspectiveScore + (board.cols - Math.abs(col - center)) * 3
+      };
+    });
+    ranked.sort((left, right) => right.score - left.score || Math.abs(left.col - center) - Math.abs(right.col - center));
+    return ranked.slice(0, Math.max(1, Math.min(limit, ranked.length)));
   }
 
-  private threatScore(board: Board, player: Player): number {
+  private scoreBoard(board: Board): number {
+    const aiWin = board.scanPlayerWinner(2);
+    if (aiWin) return AI_WIN_SCORE;
+    const humanWin = board.scanPlayerWinner(1);
+    if (humanWin) return -AI_WIN_SCORE;
+
+    const aiThreats = this.threatScore(board, 2);
+    const humanThreats = this.threatScore(board, 1);
+    let score = aiThreats.score - humanThreats.score * 1.22 + this.positionScore(board);
+
+    if (aiThreats.immediateWins > 1) score += 18_000;
+    if (humanThreats.immediateWins > 1) score -= 22_000;
+    if (aiThreats.nearWins > 1) score += 1_400;
+    if (humanThreats.nearWins > 1) score -= 1_750;
+    return score;
+  }
+
+  private threatScore(board: Board, player: Player): { score: number; immediateWins: number; nearWins: number } {
     const opponent = otherPlayer(player);
     let score = 0;
+    let immediateWins = 0;
+    let nearWins = 0;
+    const seenWindows = new Set<string>();
 
     for (let row = 0; row < board.rows; row += 1) {
       for (let col = 0; col < board.cols; col += 1) {
@@ -651,21 +830,84 @@ export class GameEngine {
           const cells = this.collectWindow(board, row, col, direction);
           if (cells.length !== board.winLength) continue;
 
+          const windowKey = cells
+            .map((cell) => `${cell.row}:${cell.col}`)
+            .sort()
+            .join('|');
+          if (seenWindows.has(windowKey)) continue;
+          seenWindows.add(windowKey);
+
           const values = cells.map((cell) => board.matrix[cell.row][cell.col]);
           if (values.includes(-1) || values.includes(opponent)) continue;
 
           const owned = values.filter((value) => value === player).length;
-          const empty = values.filter((value) => value === 0).length;
           if (owned === 0) continue;
 
-          score += owned ** 3 * 8;
-          if (owned === board.winLength - 1 && empty === 1) score += 180;
-          if (owned === board.winLength - 2 && empty === 2) score += 28;
+          const missing = board.winLength - owned;
+          const playableEmpties = cells.filter(
+            (cell) => board.matrix[cell.row][cell.col] === 0 && board.findDropRow(cell.col, this.gravity) === cell.row
+          ).length;
+          const openEnds = this.countOpenEnds(board, row, col, direction, board.winLength);
+
+          if (missing === 1) {
+            score += 3_400 + playableEmpties * 7_500 + openEnds * 420;
+            if (playableEmpties > 0) immediateWins += 1;
+          } else if (missing === 2) {
+            score += 260 + playableEmpties * 460 + openEnds * 95;
+            if (playableEmpties > 0) nearWins += 1;
+          } else if (missing === 3) {
+            score += 38 + playableEmpties * 52 + openEnds * 16;
+          } else {
+            score += owned * 5;
+          }
         }
       }
     }
 
+    return { score, immediateWins, nearWins };
+  }
+
+  private positionScore(board: Board): number {
+    const center = (board.cols - 1) / 2;
+    let score = 0;
+    for (let row = 0; row < board.rows; row += 1) {
+      for (let col = 0; col < board.cols; col += 1) {
+        const cell = board.matrix[row][col];
+        if (cell !== 1 && cell !== 2) continue;
+        const centrality = Math.max(0, board.cols / 2 - Math.abs(col - center));
+        const height = this.gravity === 'down' ? row / Math.max(1, board.rows - 1) : 1 - row / Math.max(1, board.rows - 1);
+        const value = centrality * 7 + height * 1.5;
+        score += cell === 2 ? value : -value;
+      }
+    }
     return score;
+  }
+
+  private countOpenEnds(
+    board: Board,
+    row: number,
+    col: number,
+    direction: Position,
+    length: number
+  ): number {
+    const before = this.resolvePosition(board, row - direction.row, col - direction.col);
+    const after = this.resolvePosition(board, row + direction.row * length, col + direction.col * length);
+    let openEnds = 0;
+    if (before && board.matrix[before.row][before.col] === 0) openEnds += 1;
+    if (after && board.matrix[after.row][after.col] === 0) openEnds += 1;
+    return openEnds;
+  }
+
+  private getBoardKey(board: Board, player: Player): string {
+    const matrix = board.matrix.map((row) => row.join('')).join('/');
+    return `${player}:${matrix}`;
+  }
+
+  private isSearchExpired(context: SearchContext): boolean {
+    if (context.aborted) return true;
+    if (Date.now() <= context.deadline) return false;
+    context.aborted = true;
+    return true;
   }
 
   private collectWindow(board: Board, row: number, col: number, direction: Position): Position[] {

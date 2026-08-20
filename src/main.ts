@@ -1,17 +1,22 @@
 import {
+  ArrowRight,
   ArrowDownUp,
   BadgeCheck,
+  Bot,
   Bomb,
+  ChevronDown,
+  ChevronUp,
   Check,
-  CircleHelp,
   CircleDot,
   createIcons,
+  Eye,
   LogIn,
   LogOut,
   Play,
   RefreshCw,
   Settings,
   Undo2,
+  Users,
   Wifi,
   X
 } from 'lucide';
@@ -30,10 +35,14 @@ import {
 } from './core/types';
 import type { ClientToServerEvents, OnlineRole, OnlineRoomState, ServerToClientEvents } from './network/types';
 import { CanvasRenderer } from './render/CanvasRenderer';
+import type { ThreeRenderer } from './render/ThreeRenderer';
+import type { GameRenderer, RenderState } from './render/types';
 
 const SETTINGS_STORAGE_KEY = 'gravity-chess:settings';
+const RENDER_MODE_STORAGE_KEY = 'gravity-chess:render-mode:v2';
 
 const engine = new GameEngine(loadStoredSettings());
+let topologyPerspectivePreference = engine.settings.topologyPerspectiveEnabled;
 let selectedMode: ActionMode = 'drop';
 let inputLocked = false;
 let aiPending = false;
@@ -43,37 +52,56 @@ let replayFrameIndex: number | null = null;
 let lastTick = performance.now();
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
 let onlineRoom: OnlineRoomState | null = null;
+let onlineModeSelected = false;
 let pendingRemoteOutcome: MoveOutcome | null = null;
 let settingsPreview: GameSettings | null = null;
 let settingsPreviewBoard: Board | null = null;
 let settingsDirty = false;
-let previousDialogFocus: HTMLElement | null = null;
 
 const canvas = query<HTMLCanvasElement>('#gameCanvas');
+const app = query<HTMLElement>('#app');
 const canvasShell = query<HTMLElement>('#canvasShell');
-const renderer = new CanvasRenderer(canvas, canvasShell, engine.board, () => ({
-  currentPlayer: engine.currentPlayer,
-  gravity: engine.gravity,
-  status: engine.status,
-  winner: engine.winner,
-  winLine: engine.winLine,
-  actionMode: selectedMode,
-  previewEnabled: !inputLocked && !replaying && !settingsDirty && canActLocally() && engine.status === 'playing',
-  scoreSkew: engine.getScoreSkew(),
-  topologyPerspectiveEnabled: getVisualSettings().topologyPerspectiveEnabled,
-  wrapHorizontal: getVisualSettings().wrapHorizontal,
-  wrapVertical: getVisualSettings().wrapVertical
-}));
+const threeViewport = query<HTMLElement>('#threeViewport');
+const canvasModeBtn = query<HTMLButtonElement>('#canvasModeBtn');
+const threeModeBtn = query<HTMLButtonElement>('#threeModeBtn');
+const getRenderState = (): RenderState => {
+  const settings = getVisualSettings();
+  const visualBoard = settingsPreviewBoard ?? engine.board;
+  return {
+    matrix: visualBoard.cloneMatrix(),
+    rows: visualBoard.rows,
+    cols: visualBoard.cols,
+    currentPlayer: engine.currentPlayer,
+    gravity: engine.gravity,
+    status: engine.status,
+    winner: engine.winner,
+    winLine: engine.winLine,
+    actionMode: selectedMode,
+    previewEnabled: !inputLocked && !replaying && !settingsDirty && canActLocally() && engine.status === 'playing',
+    scoreSkew: engine.getScoreSkew(),
+    topologyPerspectiveEnabled: settings.topologyPerspectiveEnabled,
+    wrapHorizontal: settings.wrapHorizontal,
+    wrapVertical: settings.wrapVertical
+  };
+};
+let canvasRenderer: CanvasRenderer | null = null;
+let threeRenderer: ThreeRenderer | null = null;
+let threeRendererPromise: Promise<ThreeRenderer | null> | null = null;
+let threeRendererUnavailable = false;
+let renderer!: GameRenderer;
+let renderMode: '2d' | '3d' = '3d';
 
 const currentToken = query<HTMLElement>('#currentToken');
 const statusText = query<HTMLElement>('#statusText');
+const mobileStatus = query<HTMLElement>('#mobileStatus');
 const redClock = query<HTMLElement>('#redClock');
 const goldClock = query<HTMLElement>('#goldClock');
 const turnClock = query<HTMLElement>('#turnClock');
 const modeSummary = query<HTMLElement>('#modeSummary');
-const winnerLine = query<HTMLElement>('#winnerLine');
 const moveCount = query<HTMLElement>('#moveCount');
 const moveList = query<HTMLOListElement>('#moveList');
+const moveLogSection = query<HTMLElement>('#moveLogSection');
+const moveLogToggle = query<HTMLButtonElement>('#moveLogToggle');
 
 const rowsInput = query<HTMLInputElement>('#rowsInput');
 const colsInput = query<HTMLInputElement>('#colsInput');
@@ -115,9 +143,27 @@ const shareUrl = query<HTMLElement>('#shareUrl');
 const settingsDrawer = query<HTMLElement>('#settingsDrawer');
 const settingsToggleBtn = query<HTMLButtonElement>('#settingsToggleBtn');
 const settingsCloseBtn = query<HTMLButtonElement>('#settingsCloseBtn');
-const howToPlayBtn = query<HTMLButtonElement>('#howToPlayBtn');
-const howToPlayDialog = query<HTMLElement>('#howToPlayDialog');
-const howToPlayCloseBtn = query<HTMLButtonElement>('#howToPlayCloseBtn');
+const matchMenuBtn = query<HTMLButtonElement>('#matchMenuBtn');
+const matchMenu = query<HTMLElement>('#matchMenu');
+const matchMenuCloseBtn = query<HTMLButtonElement>('#matchMenuCloseBtn');
+const battleAiBtn = query<HTMLButtonElement>('#battleAiBtn');
+const battleLocalBtn = query<HTMLButtonElement>('#battleLocalBtn');
+const battleOnlineBtn = query<HTMLButtonElement>('#battleOnlineBtn');
+const battleOnlinePanel = query<HTMLElement>('#battleOnlinePanel');
+const battleOnlineStatus = query<HTMLElement>('#battleOnlineStatus');
+const battleCurrentRoomCode = query<HTMLElement>('#battleCurrentRoomCode');
+const battleHostBtn = query<HTMLButtonElement>('#battleHostBtn');
+const battleJoinBtn = query<HTMLButtonElement>('#battleJoinBtn');
+const battleLeaveBtn = query<HTMLButtonElement>('#battleLeaveBtn');
+const battleRoomCodeInput = query<HTMLInputElement>('#battleRoomCodeInput');
+const boardMenuBtn = query<HTMLButtonElement>('#boardMenuBtn');
+const boardMenu = query<HTMLElement>('#boardMenu');
+const boardMenuCloseBtn = query<HTMLButtonElement>('#boardMenuCloseBtn');
+const boardPerspectiveBtn = query<HTMLButtonElement>('#boardPerspectiveBtn');
+const topologyChoices = query<HTMLElement>('#topologyChoices');
+const topologySummary = query<HTMLElement>('#topologySummary');
+const visitCount = query<HTMLElement>('#visitCount');
+const visitCountValue = query<HTMLElement>('#visitCountValue');
 const undoRequestDialog = query<HTMLElement>('#undoRequestDialog');
 const undoRequestTitle = query<HTMLElement>('#undoRequestTitle');
 const undoRequestText = query<HTMLElement>('#undoRequestText');
@@ -137,34 +183,50 @@ const lucideIcons = {
   BadgeCheck,
   Bomb,
   Check,
-  CircleHelp,
   CircleDot,
+  Eye,
   LogIn,
   LogOut,
   Play,
   RefreshCw,
   Settings,
   Undo2,
+  ArrowRight,
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Users,
   Wifi,
   X
 };
 
-createIcons({ icons: lucideIcons });
-syncSettingsToForm(engine.settings);
-updateRuleConfigVisibility(engine.settings);
-wireEvents();
-updateUI();
-requestAnimationFrame(tick);
+void bootstrap();
+
+async function bootstrap(): Promise<void> {
+  createIcons({ icons: lucideIcons });
+  syncSettingsToForm(engine.settings);
+  updateRuleConfigVisibility(engine.settings);
+  wireEvents();
+  await setRenderMode(loadStoredRenderMode());
+  app.hidden = false;
+  updateUI();
+  requestAnimationFrame(tick);
+  void recordPageVisit();
+}
 
 function wireEvents(): void {
-  canvas.addEventListener('pointermove', (event) => renderer.setHoverFromEvent(event));
-  canvas.addEventListener('pointerleave', () => renderer.clearHover());
-  canvas.addEventListener('click', async (event) => {
-    if (inputLocked || replaying || settingsDirty || !canActLocally() || engine.status !== 'playing') return;
-    const col = renderer.getColumnFromEvent(event);
-    if (col === null) return;
-    await performColumnAction(col);
-  });
+  canvasModeBtn.addEventListener('click', () => void setRenderMode('2d'));
+  threeModeBtn.addEventListener('click', () => void setRenderMode('3d'));
+  for (const target of [canvas, threeViewport]) {
+    target.addEventListener('pointermove', (event) => renderer.setHoverFromEvent(event));
+    target.addEventListener('pointerleave', () => renderer.clearHover());
+    target.addEventListener('click', async (event) => {
+      if (inputLocked || replaying || settingsDirty || !canActLocally() || engine.status !== 'playing') return;
+      const col = renderer.getColumnFromEvent(event);
+      if (col === null) return;
+      await performColumnAction(col);
+    });
+  }
 
   dropModeBtn.addEventListener('click', () => {
     selectedMode = 'drop';
@@ -172,32 +234,38 @@ function wireEvents(): void {
   });
 
   bombModeBtn.addEventListener('click', () => {
-    if (canUseBomb(engine.currentPlayer)) {
+    if (renderMode !== '3d' && canUseBomb(engine.currentPlayer)) {
       selectedMode = 'bomb';
       updateUI();
     }
   });
 
   checkWinBtn.addEventListener('click', async () => {
-    if (inputLocked || replaying || !canActLocally()) return;
+    if (renderMode === '3d' || inputLocked || replaying || !canActLocally()) return;
     await performManualCheck();
   });
 
   flipBtn.addEventListener('click', async () => {
-    if (inputLocked || replaying || !canActLocally()) return;
+    if (renderMode === '3d' || inputLocked || replaying || !canActLocally()) return;
     await performFlip();
   });
 
-  undoBtn.addEventListener('click', () => {
+  undoBtn.addEventListener('click', async () => {
     if (inputLocked || replaying) return;
     if (isOnline()) {
       emitOnlineAction({ kind: 'undo-request' });
       return;
     }
+    const before = getRenderState();
     if (engine.undo()) {
+      const after = getRenderState();
       selectedMode = 'drop';
-      renderer.setReplayFrame(null);
-      renderer.setBoard(engine.board);
+      setRendererReplayFrame(null);
+      setRendererBoard(engine.board);
+      inputLocked = true;
+      updateUI();
+      await renderer.animateMove({ ok: true, kind: 'undo' }, before, after);
+      inputLocked = false;
       updateUI();
       maybeScheduleAi();
     }
@@ -210,6 +278,10 @@ function wireEvents(): void {
     }
     if (inputLocked) return;
     startReplay();
+  });
+  moveLogToggle.addEventListener('click', () => {
+    const collapsed = moveLogSection.classList.toggle('collapsed');
+    moveLogToggle.setAttribute('aria-expanded', String(!collapsed));
   });
   moveList.addEventListener('click', (event) => {
     if (settingsDirty || (inputLocked && !replaying)) return;
@@ -233,23 +305,39 @@ function wireEvents(): void {
   hostRoomBtn.addEventListener('click', () => createOnlineRoom());
   joinRoomBtn.addEventListener('click', () => joinOnlineRoom());
   leaveRoomBtn.addEventListener('click', () => leaveOnlineRoom());
+  matchMenuBtn.addEventListener('click', () => setMatchMenu(matchMenu.hidden));
+  matchMenuCloseBtn.addEventListener('click', () => setMatchMenu(false));
+  battleAiBtn.addEventListener('click', () => startMatch('ai'));
+  battleLocalBtn.addEventListener('click', () => startMatch('local'));
+  battleOnlineBtn.addEventListener('click', () => {
+    enterOnlineMode();
+  });
+  battleHostBtn.addEventListener('click', () => {
+    createOnlineRoom();
+  });
+  battleJoinBtn.addEventListener('click', () => {
+    roomCodeInput.value = battleRoomCodeInput.value.trim().toUpperCase();
+    joinOnlineRoom();
+  });
+  battleLeaveBtn.addEventListener('click', () => leaveOnlineRoom());
+  boardMenuBtn.addEventListener('click', () => setBoardMenu(boardMenu.hidden));
+  boardMenuCloseBtn.addEventListener('click', () => setBoardMenu(false));
+  boardMenu.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const choice = target.closest<HTMLButtonElement>('[data-header-topology]');
+    if (!choice) return;
+    setTopology(choice.dataset.headerTopology ?? 'standard', true);
+  });
+  boardPerspectiveBtn.addEventListener('click', () => {
+    topologyPerspectiveInput.checked = !topologyPerspectiveInput.checked;
+    applyPerspectivePreference();
+  });
   settingsToggleBtn.addEventListener('click', () => {
     const isOpen = settingsDrawer.classList.contains('open');
     setSettingsDrawer(!(isOpen && !settingsDirty));
   });
   settingsCloseBtn.addEventListener('click', () => setSettingsDrawer(false));
-  howToPlayBtn.addEventListener('click', () => setHowToPlayDialog(true));
-  howToPlayCloseBtn.addEventListener('click', () => setHowToPlayDialog(false));
-  howToPlayDialog.addEventListener('click', (event) => {
-    if (event.target === howToPlayDialog) {
-      setHowToPlayDialog(false);
-    }
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !howToPlayDialog.classList.contains('hidden')) {
-      setHowToPlayDialog(false);
-    }
-  });
   undoAcceptBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-accept' }));
   undoDeclineBtn.addEventListener('click', () => emitOnlineAction({ kind: 'undo-decline' }));
 
@@ -265,6 +353,14 @@ function wireEvents(): void {
   modeSelect.addEventListener('change', () => {
     difficultySelect.disabled = modeSelect.value !== 'ai';
     updateSettingsPreview();
+  });
+
+  topologyChoices.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const choice = target.closest<HTMLButtonElement>('[data-topology]');
+    if (!choice) return;
+    setTopology(choice.dataset.topology ?? 'standard');
   });
 
   const settingControls: Array<HTMLInputElement | HTMLSelectElement> = [
@@ -294,20 +390,39 @@ function wireEvents(): void {
   }
 
   document.addEventListener('pointerdown', (event) => {
-    if (!settingsDrawer.classList.contains('open') || settingsDirty) return;
     const target = event.target;
     if (!(target instanceof Node)) return;
-    if (settingsDrawer.contains(target) || settingsToggleBtn.contains(target)) return;
-    setSettingsDrawer(false);
+    if (!matchMenu.hidden && !matchMenu.contains(target) && !matchMenuBtn.contains(target)) {
+      setMatchMenu(false);
+    }
+    if (!boardMenu.hidden && !boardMenu.contains(target) && !boardMenuBtn.contains(target)) {
+      setBoardMenu(false);
+    }
+    if (settingsDrawer.classList.contains('open') && !settingsDirty) {
+      if (settingsDrawer.contains(target) || settingsToggleBtn.contains(target)) return;
+      setSettingsDrawer(false);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setMatchMenu(false);
+      setBoardMenu(false);
+      if (!settingsDirty) setSettingsDrawer(false);
+    }
   });
 }
 
 async function performColumnAction(col: number): Promise<void> {
+  if (renderMode === '3d' && selectedMode !== 'drop') {
+    selectedMode = 'drop';
+  }
   if (isOnline()) {
     emitOnlineAction({ kind: 'drop', col, mode: selectedMode });
     return;
   }
 
+  const before = getRenderState();
   const outcome = engine.playColumn(col, selectedMode);
   if (!outcome.ok) {
     selectedMode = 'drop';
@@ -315,44 +430,48 @@ async function performColumnAction(col: number): Promise<void> {
     return;
   }
 
-  await playOutcome(outcome);
+  await playOutcome(outcome, before, getRenderState());
 }
 
 async function performFlip(): Promise<void> {
+  if (renderMode === '3d') return;
   if (isOnline()) {
     emitOnlineAction({ kind: 'flip' });
     return;
   }
 
+  const before = getRenderState();
   const outcome = engine.flipGravity();
   if (!outcome.ok) {
     updateUI(outcome.message);
     return;
   }
 
-  await playOutcome(outcome);
+  await playOutcome(outcome, before, getRenderState());
 }
 
 async function performManualCheck(): Promise<void> {
+  if (renderMode === '3d') return;
   if (isOnline()) {
     emitOnlineAction({ kind: 'check' });
     return;
   }
 
+  const before = getRenderState();
   const outcome = engine.checkWinManually();
   if (!outcome.ok) {
     updateUI(outcome.message);
     return;
   }
 
-  await playOutcome(outcome);
+  await playOutcome(outcome, before, getRenderState());
 }
 
-async function playOutcome(outcome: MoveOutcome): Promise<void> {
+async function playOutcome(outcome: MoveOutcome, before?: RenderState, after?: RenderState): Promise<void> {
   inputLocked = true;
-  renderer.setReplayFrame(null);
+  setRendererReplayFrame(null);
   updateUI();
-  await renderer.animateMove(outcome);
+  await renderer.animateMove(outcome, before, after ?? getRenderState());
   inputLocked = false;
 
   if (!canUseBomb(engine.currentPlayer)) {
@@ -376,8 +495,9 @@ function maybeScheduleAi(): void {
     }
 
     selectedMode = 'drop';
+    const before = getRenderState();
     const outcome = engine.playColumn(col, 'drop');
-    await playOutcome(outcome);
+    await playOutcome(outcome, before, getRenderState());
   }, 460);
 }
 
@@ -416,7 +536,7 @@ function stopReplay(): void {
   replaying = false;
   inputLocked = false;
   replayFrameIndex = null;
-  renderer.setReplayFrame(null);
+  setRendererReplayFrame(null);
   updateUI();
   maybeScheduleAi();
 }
@@ -439,7 +559,7 @@ function showReplayFrame(index: number): void {
   const frameIndex = clampInt(index, 0, engine.replayFrames.length - 1);
   const frame = engine.replayFrames[frameIndex];
   replayFrameIndex = frameIndex;
-  renderer.setReplayFrame(frame);
+  setRendererReplayFrame(frame);
   updateUI(undefined, frame);
 }
 
@@ -448,25 +568,29 @@ function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
 
   socket = io();
   socket.on('room:state', async (payload) => {
+    const before = getRenderState();
+    onlineModeSelected = true;
     onlineRoom = payload;
     pendingRemoteOutcome = payload.outcome ?? null;
     engine.importState(payload.state);
+    engine.settings.topologyPerspectiveEnabled = topologyPerspectivePreference;
     saveStoredSettings(engine.settings);
     replayFrameIndex = null;
-    renderer.setReplayFrame(null);
-    renderer.setBoard(engine.board);
+    setRendererReplayFrame(null);
+    setRendererBoard(engine.board);
     syncSettingsToForm(engine.settings);
     settingsPreview = null;
     settingsPreviewBoard = null;
     settingsDirty = false;
     updateRuleConfigVisibility(engine.settings);
+    const after = getRenderState();
 
     const outcome = pendingRemoteOutcome;
     pendingRemoteOutcome = null;
-    if (outcome?.ok && outcome.position && outcome.kind !== 'check') {
+    if (outcome?.ok && outcome.kind && outcome.kind !== 'check') {
       inputLocked = true;
       updateUI(payload.message);
-      await renderer.animateMove(outcome);
+      await renderer.animateMove(outcome, before, after);
       inputLocked = false;
     } else {
       inputLocked = false;
@@ -480,18 +604,24 @@ function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
 
   socket.on('room:error', (payload) => {
     inputLocked = false;
-    updateUI(payload.message);
+    onlineRoom = null;
+    updateUI(onlineModeSelected ? '未加入房间' : payload.message);
   });
 
   socket.on('disconnect', () => {
     onlineRoom = null;
-    updateUI('联机已断开');
+    updateUI(onlineModeSelected ? '未加入房间' : '联机已断开');
   });
 
   return socket;
 }
 
 function createOnlineRoom(): void {
+  onlineModeSelected = true;
+  onlineRoom = null;
+  modeSelect.value = 'local';
+  difficultySelect.disabled = true;
+  updateUI();
   getSocket().emit('room:create', readSettings());
 }
 
@@ -501,18 +631,222 @@ function joinOnlineRoom(): void {
     updateUI('请输入房间码');
     return;
   }
+  onlineModeSelected = true;
+  onlineRoom = null;
+  modeSelect.value = 'local';
+  difficultySelect.disabled = true;
+  updateUI();
   getSocket().emit('room:join', code);
 }
 
 function leaveOnlineRoom(): void {
-  if (!socket) return;
-  socket.emit('room:leave');
+  if (socket && onlineRoom) socket.emit('room:leave');
   onlineRoom = null;
+  onlineModeSelected = false;
+  battleOnlinePanel.hidden = true;
+  modeSelect.value = 'local';
+  engine.settings.matchMode = 'local';
+  difficultySelect.disabled = true;
+  saveStoredSettings(engine.settings);
+  syncSettingsToForm(engine.settings);
   updateUI('已离开房间');
+}
+
+function setMatchMenu(open: boolean): void {
+  matchMenu.hidden = !open;
+  matchMenuBtn.setAttribute('aria-expanded', String(open));
+  if (open) battleOnlinePanel.hidden = !onlineModeSelected;
+}
+
+function setBoardMenu(open: boolean): void {
+  boardMenu.hidden = !open;
+  boardMenuBtn.setAttribute('aria-expanded', String(open));
+}
+
+async function setRenderMode(mode: '2d' | '3d'): Promise<void> {
+  if (mode === '3d') {
+    const restriction = getThreeModeRestriction(getVisualSettings());
+    if (restriction) {
+      if (renderMode !== '2d' || !renderer) {
+        ensureCanvasRenderer();
+        activateRenderMode('2d');
+        updateUI();
+      }
+      return;
+    }
+    if (threeRendererUnavailable) {
+      if (renderMode !== '2d' || !renderer) {
+        ensureCanvasRenderer();
+        activateRenderMode('2d');
+        updateUI();
+      }
+      return;
+    }
+    if (!(await ensureThreeRenderer())) {
+      activateRenderMode('2d');
+      updateUI();
+      return;
+    }
+    const currentRestriction = getThreeModeRestriction(getVisualSettings());
+    if (currentRestriction) {
+      activateRenderMode('2d');
+      updateUI();
+      return;
+    }
+  }
+
+  activateRenderMode(mode);
+  updateThreeModeAvailability(getVisualSettings());
+  updateUI();
+}
+
+function activateRenderMode(mode: '2d' | '3d'): void {
+  renderMode = mode;
+  if (mode === '3d') selectedMode = 'drop';
+  saveStoredRenderMode(mode);
+  document.documentElement.dataset.renderMode = mode;
+  renderer = mode === '3d' ? (threeRenderer as GameRenderer) : ensureCanvasRenderer();
+  canvasShell.dataset.renderMode = mode;
+  canvasModeBtn.classList.toggle('active', mode === '2d');
+  threeModeBtn.classList.toggle('active', mode === '3d');
+  canvasModeBtn.setAttribute('aria-pressed', String(mode === '2d'));
+  threeModeBtn.setAttribute('aria-pressed', String(mode === '3d'));
+  canvas.hidden = mode === '3d';
+  threeViewport.hidden = mode !== '3d';
+  setRendererBoard(settingsPreviewBoard ?? engine.board);
+  setRendererReplayFrame(replayFrameIndex === null ? null : engine.replayFrames[replayFrameIndex] ?? null);
+  renderer.sync(getRenderState());
+}
+
+function getThreeModeRestriction(settings: GameSettings): string | null {
+  if (settings.obstaclesEnabled) return '障碍规则开启时';
+  if (settings.bombsEnabled) return '炸弹规则开启时';
+  if (settings.gravityFlipEnabled) return '重力反转开启时';
+  if (!settings.autoWinCheckEnabled) return '手动查胜开启时';
+  if (settings.topologyPerspectiveEnabled && (settings.wrapHorizontal || settings.wrapVertical)) {
+    return '拓扑透视开启时';
+  }
+  return null;
+}
+
+function ensureCanvasRenderer(): CanvasRenderer {
+  if (!canvasRenderer) {
+    canvasRenderer = new CanvasRenderer(canvas, canvasShell, engine.board, getRenderState);
+  }
+  return canvasRenderer;
+}
+
+function updateThreeModeAvailability(settings: GameSettings): void {
+  const restriction = getThreeModeRestriction(settings);
+  threeModeBtn.disabled = Boolean(threeRendererPromise) || Boolean(restriction) || threeRendererUnavailable;
+  threeModeBtn.title = threeRendererUnavailable
+    ? '3D 视图暂不可用，请使用 2D'
+    : restriction
+    ? `当前规则需要 2D：${restriction}`
+    : '切换到 3D 棋盘';
+  threeModeBtn.setAttribute('aria-label', threeModeBtn.title);
+}
+
+function updateThreeControlAvailability(settings: GameSettings): void {
+  const threeActive = renderMode === '3d';
+  const restricted = getThreeModeRestriction(settings);
+  const topologyRestricted = threeActive && Boolean(settings.topologyPerspectiveEnabled) &&
+    (settings.wrapHorizontal || settings.wrapVertical);
+  const controls: Array<[HTMLInputElement | HTMLSelectElement, string]> = [
+    [autoWinCheckInput, '手动查胜需要切换到 2D'],
+    [obstaclesInput, '障碍规则需要切换到 2D'],
+    [obstacleCountInput, '障碍规则需要切换到 2D'],
+    [bombsInput, '炸弹规则需要切换到 2D'],
+    [bombLimitModeSelect, '炸弹规则需要切换到 2D'],
+    [bombLimitInput, '炸弹规则需要切换到 2D'],
+    [gravityFlipInput, '重力反转需要切换到 2D'],
+    [gravityFlipLimitModeSelect, '重力反转需要切换到 2D'],
+    [gravityFlipLimitInput, '重力反转需要切换到 2D']
+  ];
+  for (const [control, title] of controls) {
+    control.disabled = threeActive;
+    if (threeActive) control.title = title;
+    else if (control.title === title) control.title = '';
+  }
+  topologyPerspectiveInput.disabled = topologyRestricted;
+  boardPerspectiveBtn.disabled = topologyRestricted;
+  if (topologyRestricted) {
+    topologyPerspectiveInput.title = '拓扑透视需要切换到 2D';
+    boardPerspectiveBtn.title = '拓扑透视需要切换到 2D';
+  } else {
+    topologyPerspectiveInput.title = '';
+    boardPerspectiveBtn.title = '透视展示';
+  }
+  if (!threeActive) {
+    bombLimitInput.disabled = bombLimitModeSelect.value === 'unlimited';
+    gravityFlipLimitInput.disabled = gravityFlipLimitModeSelect.value === 'unlimited';
+  }
+  applySettingsBtn.dataset.threeRestriction = restricted ?? '';
+}
+
+async function ensureThreeRenderer(): Promise<ThreeRenderer | null> {
+  if (threeRendererPromise) return threeRendererPromise;
+  if (threeRenderer) {
+    await threeRenderer.ready;
+    return threeRenderer;
+  }
+
+  threeModeBtn.disabled = true;
+  threeRendererPromise = import('./render/ThreeRenderer')
+    .then(async ({ ThreeRenderer: Renderer3D }) => {
+      threeRendererUnavailable = false;
+      threeRenderer = new Renderer3D(threeViewport, settingsPreviewBoard ?? engine.board, getRenderState);
+      await threeRenderer.ready;
+      threeRenderer.sync(getRenderState());
+      return threeRenderer;
+    })
+    .catch((error) => {
+      console.warn('Three.js renderer unavailable; continuing with Canvas.', error);
+      threeRendererUnavailable = true;
+      return null;
+    })
+    .finally(() => {
+      threeRendererPromise = null;
+      updateThreeModeAvailability(getVisualSettings());
+    });
+  return threeRendererPromise;
+}
+
+function setRendererBoard(board: Board): void {
+  canvasRenderer?.setBoard(board);
+  threeRenderer?.setBoard(board);
+}
+
+function setRendererReplayFrame(frame: ReplayFrame | null): void {
+  canvasRenderer?.setReplayFrame(frame);
+  threeRenderer?.setReplayFrame(frame);
+}
+
+function startMatch(mode: 'ai' | 'local'): void {
+  if (isOnline() || onlineModeSelected) leaveOnlineRoom();
+  onlineModeSelected = false;
+  modeSelect.value = mode;
+  difficultySelect.disabled = mode !== 'ai';
+  setMatchMenu(false);
+  resetGame(readSettings());
+}
+
+function enterOnlineMode(): void {
+  onlineModeSelected = true;
+  battleOnlinePanel.hidden = false;
+  modeSelect.value = 'local';
+  difficultySelect.disabled = true;
+  engine.settings.matchMode = 'local';
+  saveStoredSettings(engine.settings);
+  syncSettingsToForm(engine.settings);
+  updateUI();
+  if (!onlineRoom) createOnlineRoom();
 }
 
 function setSettingsDrawer(open: boolean): void {
   settingsDrawer.classList.toggle('open', open);
+  settingsDrawer.setAttribute('aria-hidden', String(!open));
+  settingsToggleBtn.setAttribute('aria-expanded', String(open));
   if (open) {
     updateSettingsPreview();
     return;
@@ -521,25 +855,10 @@ function setSettingsDrawer(open: boolean): void {
   settingsPreview = null;
   settingsDirty = false;
   settingsPreviewBoard = null;
-  renderer.setBoard(engine.board);
+  setRendererBoard(engine.board);
   syncSettingsToForm(engine.settings);
   updateRuleConfigVisibility(engine.settings);
   updateUI();
-}
-
-function setHowToPlayDialog(open: boolean): void {
-  howToPlayDialog.classList.toggle('hidden', !open);
-  howToPlayDialog.setAttribute('aria-hidden', String(!open));
-
-  if (open) {
-    previousDialogFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    howToPlayCloseBtn.focus();
-    return;
-  }
-
-  const focusTarget = previousDialogFocus ?? howToPlayBtn;
-  previousDialogFocus = null;
-  focusTarget.focus();
 }
 
 function emitOnlineAction(action: Parameters<ClientToServerEvents['game:action']>[0]): void {
@@ -553,6 +872,7 @@ function emitOnlineAction(action: Parameters<ClientToServerEvents['game:action']
 }
 
 function resetGame(settings: GameSettings): void {
+  topologyPerspectivePreference = settings.topologyPerspectiveEnabled;
   if (isOnline()) {
     if (onlineRoom?.isHost) {
       saveStoredSettings(settings);
@@ -574,8 +894,8 @@ function resetGame(settings: GameSettings): void {
   selectedMode = 'drop';
   engine.reset(settings);
   saveStoredSettings(engine.settings);
-  renderer.setReplayFrame(null);
-  renderer.setBoard(engine.board);
+  setRendererReplayFrame(null);
+  setRendererBoard(engine.board);
   syncSettingsToForm(engine.settings);
   settingsPreview = null;
   settingsPreviewBoard = null;
@@ -605,14 +925,17 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   const currentPlayer = replayFrame?.currentPlayer ?? engine.currentPlayer;
   const status = replayFrame?.status ?? engine.status;
   const winner = replayFrame?.winner ?? engine.winner;
-  const winLine = replayFrame?.winLine ?? engine.winLine;
   const visualSettings = getVisualSettings();
   const visualBoard = settingsPreviewBoard ?? engine.board;
+  updateThreeModeAvailability(visualSettings);
+  updateThreeControlAvailability(visualSettings);
 
   document.documentElement.style.setProperty('--board-aspect', `${visualBoard.cols} / ${visualBoard.rows}`);
-  currentToken.className = `player-token ${currentPlayer === 1 ? 'red' : 'gold'}`;
+  currentToken.className = `player-token ${currentPlayer === 1 ? 'blue' : 'yellow'}`;
 
-  if (message) {
+  if (onlineModeSelected && !onlineRoom) {
+    statusText.textContent = '未加入房间';
+  } else if (message) {
     statusText.textContent = message;
   } else if (replaying && replayFrame) {
     statusText.textContent = `复盘：${replayFrame.label}`;
@@ -625,6 +948,7 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   } else {
     statusText.textContent = `${engine.getPlayerName(currentPlayer)}行动`;
   }
+  mobileStatus.textContent = statusText.textContent;
 
   redClock.textContent = visualSettings.totalTimerEnabled ? formatTime(engine.totalRemaining[1]) : '--:--';
   goldClock.textContent = visualSettings.totalTimerEnabled ? formatTime(engine.totalRemaining[2]) : '--:--';
@@ -639,6 +963,7 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   checkWinBtn.title = `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
   const hasPendingUndo = Boolean(onlineRoom?.pendingUndoRequest);
   checkWinBtn.disabled =
+    renderMode === '3d' ||
     engine.settings.autoWinCheckEnabled ||
     settingsDirty ||
     inputLocked ||
@@ -647,8 +972,10 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
     !canActLocally() ||
     status !== 'playing';
   bombModeBtn.disabled =
-    settingsDirty || !canUseBomb(currentPlayer) || inputLocked || replaying || hasPendingUndo || !canActLocally();
+    renderMode === '3d' || settingsDirty || !canUseBomb(currentPlayer) || inputLocked || replaying || hasPendingUndo || !canActLocally();
+  bombModeBtn.title = renderMode === '3d' ? '炸弹棋子需要切换到 2D' : '炸弹棋子';
   flipBtn.disabled =
+    renderMode === '3d' ||
     settingsDirty ||
     !canUseFlip(currentPlayer) ||
     inputLocked ||
@@ -656,36 +983,55 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
     hasPendingUndo ||
     !canActLocally() ||
     status !== 'playing';
+  flipBtn.title = renderMode === '3d' ? '重力反转需要切换到 2D' : '重力反转';
   undoBtn.disabled = inputLocked || replaying || hasPendingUndo || !canRequestUndo();
   replayBtn.disabled = (!replaying && (inputLocked || settingsDirty)) || engine.replayFrames.length <= 1;
   replayBtn.title = replaying ? '停止复盘' : '复盘';
   replayBtn.innerHTML = `<i data-lucide="${replaying ? 'x' : 'play'}"></i>`;
   dropModeBtn.disabled =
     settingsDirty || inputLocked || replaying || hasPendingUndo || !canActLocally() || status !== 'playing';
-  applySettingsBtn.disabled = (isOnline() && !onlineRoom?.isHost) || !settingsDirty;
+  checkWinBtn.title = renderMode === '3d'
+    ? '手动查胜需要切换到 2D'
+    : `检查${engine.getPlayerName(currentPlayer)}是否获胜`;
+  applySettingsBtn.disabled =
+    (isOnline() && !onlineRoom?.isHost) ||
+    !settingsDirty ||
+    (renderMode === '3d' && Boolean(getThreeModeRestriction(visualSettings)));
+  applySettingsBtn.title = renderMode === '3d' && getThreeModeRestriction(visualSettings)
+    ? '当前设置需要 2D：请先切换到 2D'
+    : '应用设置';
   newGameBtn.disabled = isOnline() && !onlineRoom?.isHost;
   redFirstBtn.disabled = isOnline() && !onlineRoom?.isHost;
   goldFirstBtn.disabled = isOnline() && !onlineRoom?.isHost;
   updateOnlineUI();
   updateUndoRequestUI();
+  updateMatchMenuChoice();
 
   renderSummary();
   renderMoves();
 
-  if (status === 'won' && winLine.length > 0) {
-    winnerLine.textContent = winLine.map((cell) => `${cell.col + 1}:${cell.row + 1}`).join('  ');
-  } else {
-    winnerLine.textContent = '';
-  }
-
+  renderer.sync(getRenderState());
   createIcons({ icons: lucideIcons });
+}
+
+function updateMatchMenuChoice(): void {
+  const mode = getVisualSettings().matchMode;
+  battleAiBtn.classList.toggle('active', !onlineModeSelected && mode === 'ai');
+  battleLocalBtn.classList.toggle('active', !onlineModeSelected && mode === 'local');
+  battleOnlineBtn.classList.toggle('active', onlineModeSelected);
+  battleAiBtn.setAttribute('aria-pressed', String(!onlineModeSelected && mode === 'ai'));
+  battleLocalBtn.setAttribute('aria-pressed', String(!onlineModeSelected && mode === 'local'));
+  battleOnlineBtn.setAttribute('aria-pressed', String(onlineModeSelected));
 }
 
 function renderSummary(): void {
   const visualSettings = getVisualSettings();
   const visualBoard = settingsPreviewBoard ?? engine.board;
+  const matchLabel = onlineModeSelected
+    ? onlineRoom ? '联机模式' : '联机模式 · 未加入房间'
+    : visualSettings.matchMode === 'ai' ? `AI ${difficultyLabel(visualSettings.aiDifficulty)}` : '本地双人';
   const badges = [
-    visualSettings.matchMode === 'ai' ? `AI ${difficultyLabel(visualSettings.aiDifficulty)}` : '本地双人',
+    matchLabel,
     `${engine.getPlayerName(visualSettings.startingPlayer)}先手`,
     `${visualBoard.rows}x${visualBoard.cols}`,
     `${visualSettings.winLength} 连珠`,
@@ -716,7 +1062,7 @@ function renderMoves(): void {
   const recent = engine.logEntries.slice(-80).reverse();
   moveList.innerHTML = recent
     .map((entry) => {
-      const marker = entry.player === 1 ? 'red-dot' : entry.player === 2 ? 'gold-dot' : 'neutral-dot';
+      const marker = entry.player === 1 ? 'blue-dot' : entry.player === 2 ? 'yellow-dot' : 'neutral-dot';
       const frameIndex = engine.logEntries.findIndex((candidate) => candidate.id === entry.id);
       const active = replayFrameIndex === frameIndex;
       return `<li><button class="move-entry${active ? ' active' : ''}" type="button" data-move-id="${entry.id}"><span class="${marker}"></span><strong>${logKindLabel(entry.kind)}</strong><span>${entry.label}</span></button></li>`;
@@ -742,21 +1088,28 @@ function logKindLabel(kind: MoveKind): string {
 
 function updateOnlineUI(): void {
   if (!onlineRoom) {
-    onlineRoleBadge.textContent = socket?.connected ? '未入房' : '离线';
-    onlineStatus.textContent = '本地模式';
+    onlineRoleBadge.textContent = onlineModeSelected ? '未入房' : socket?.connected ? '未入房' : '离线';
+    onlineStatus.textContent = onlineModeSelected ? '联机模式 · 未加入房间' : '本地模式';
+    battleOnlineStatus.textContent = onlineModeSelected ? '未加入房间' : '尚未选择联机';
+    battleCurrentRoomCode.textContent = '----';
     shareUrl.textContent = '';
     roomCodeInput.disabled = false;
     hostRoomBtn.disabled = false;
     joinRoomBtn.disabled = false;
-    leaveRoomBtn.disabled = true;
+    leaveRoomBtn.disabled = !onlineModeSelected;
+    battleHostBtn.disabled = false;
+    battleJoinBtn.disabled = false;
+    battleLeaveBtn.disabled = !onlineModeSelected;
     return;
   }
 
   const roleLabel = roleToLabel(onlineRoom.role);
+  battleOnlineStatus.textContent = onlineRoom.isHost ? `${roleLabel} · 房主` : roleLabel;
+  battleCurrentRoomCode.textContent = onlineRoom.roomCode;
   onlineRoleBadge.textContent = onlineRoom.isHost ? `${roleLabel} · 房主` : roleLabel;
-  onlineStatus.textContent = `房间 ${onlineRoom.roomCode} | ${engine.getPlayerName(engine.settings.startingPlayer)}先手 | 红方 ${
+  onlineStatus.textContent = `房间 ${onlineRoom.roomCode} | ${engine.getPlayerName(engine.settings.startingPlayer)}先手 | 蓝方 ${
     onlineRoom.players.red ? '在线' : '空位'
-  } | 金方 ${
+  } | 黄方 ${
     onlineRoom.players.gold ? '在线' : '空位'
   } | 观战 ${onlineRoom.players.spectators}`;
   if (onlineRoom.pendingUndoRequest?.requester === onlineRoom.role) {
@@ -767,6 +1120,10 @@ function updateOnlineUI(): void {
   hostRoomBtn.disabled = true;
   joinRoomBtn.disabled = true;
   leaveRoomBtn.disabled = false;
+  battleHostBtn.disabled = false;
+  battleJoinBtn.disabled = false;
+  battleLeaveBtn.disabled = false;
+  battleRoomCodeInput.value = onlineRoom.roomCode;
   shareUrl.textContent = `分享：${window.location.origin}/  房间码：${onlineRoom.roomCode}`;
 }
 
@@ -801,8 +1158,8 @@ function canRequestUndo(): boolean {
 }
 
 function roleToLabel(role: OnlineRole): string {
-  if (role === 1) return '红方';
-  if (role === 2) return '金方';
+  if (role === 1) return '蓝方';
+  if (role === 2) return '黄方';
   return '观战';
 }
 
@@ -820,22 +1177,113 @@ function updateSettingsPreview(): void {
 
   settingsDirty = !settingsMatch(formSettings, engine.settings);
   settingsPreview = drawerOpen ? formSettings : null;
+  updateTopologyUI(formSettings);
   updateRuleConfigVisibility(formSettings);
   updatePreviewBoard(formSettings, drawerOpen && settingsDirty);
   updateUI();
+}
+
+function setTopology(topology: string, applyImmediately = false): void {
+  const isHorizontal = topology === 'horizontal' || topology === 'toroidal';
+  const isVertical = topology === 'vertical' || topology === 'toroidal';
+  const currentTopology = getTopologyKey(readSettings());
+  const shouldEnablePerspective = currentTopology === 'standard' && topology !== 'standard';
+
+  wrapHorizontalInput.checked = isHorizontal;
+  wrapVerticalInput.checked = isVertical;
+  if (shouldEnablePerspective) topologyPerspectiveInput.checked = true;
+
+  updateTopologyUI(readSettings());
+  if (applyImmediately) {
+    if (shouldEnablePerspective) applyPerspectivePreference();
+    applyTopologyPreference(isHorizontal, isVertical);
+  } else {
+    updateSettingsPreview();
+  }
+}
+
+function applyTopologyPreference(wrapHorizontal: boolean, wrapVertical: boolean): void {
+  if (isOnline()) {
+    if (!onlineRoom?.isHost) {
+      syncSettingsToForm(engine.settings);
+      updateUI('只有房主可以切换棋盘');
+      return;
+    }
+    emitOnlineAction({ kind: 'topology', wrapHorizontal, wrapVertical });
+    return;
+  }
+
+  engine.setTopology(wrapHorizontal, wrapVertical);
+  saveStoredSettings(engine.settings);
+  syncSettingsToForm(engine.settings);
+  updateUI();
+}
+
+function applyPerspectivePreference(): void {
+  topologyPerspectivePreference = topologyPerspectiveInput.checked;
+  engine.settings.topologyPerspectiveEnabled = topologyPerspectivePreference;
+  saveStoredSettings(engine.settings);
+  if (settingsDrawer.classList.contains('open')) {
+    updateSettingsPreview();
+    return;
+  }
+  syncSettingsToForm(engine.settings);
+  updateUI();
+}
+
+function updateTopologyUI(
+  settings: Pick<GameSettings, 'wrapHorizontal' | 'wrapVertical'> & Partial<Pick<GameSettings, 'topologyPerspectiveEnabled'>>
+): void {
+  const topology = settings.wrapHorizontal && settings.wrapVertical
+    ? 'toroidal'
+    : settings.wrapHorizontal
+      ? 'horizontal'
+      : settings.wrapVertical
+        ? 'vertical'
+        : 'standard';
+  const labels: Record<string, string> = {
+    standard: '标准棋盘',
+    horizontal: '左右环通',
+    vertical: '上下环通',
+    toroidal: '环形棋盘'
+  };
+  topologySummary.textContent = labels[topology];
+  const perspectiveEnabled = settings.topologyPerspectiveEnabled ?? topologyPerspectiveInput.checked;
+  boardPerspectiveBtn.classList.toggle('active', perspectiveEnabled);
+  boardPerspectiveBtn.setAttribute('aria-pressed', String(perspectiveEnabled));
+  topologyChoices.querySelectorAll<HTMLButtonElement>('[data-topology]').forEach((choice) => {
+    const active = choice.dataset.topology === topology;
+    choice.classList.toggle('active', active);
+    choice.setAttribute('aria-pressed', String(active));
+  });
+  boardMenu.querySelectorAll<HTMLButtonElement>('[data-header-topology]').forEach((choice) => {
+    const active = choice.dataset.headerTopology === topology;
+    choice.classList.toggle('active', active);
+    choice.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function getTopologyKey(settings: Pick<GameSettings, 'wrapHorizontal' | 'wrapVertical'>): string {
+  return settings.wrapHorizontal && settings.wrapVertical
+    ? 'toroidal'
+    : settings.wrapHorizontal
+      ? 'horizontal'
+      : settings.wrapVertical
+        ? 'vertical'
+        : 'standard';
 }
 
 function updatePreviewBoard(settings: GameSettings, active: boolean): void {
   if (!active || !needsBoardPreview(settings)) {
     if (settingsPreviewBoard) {
       settingsPreviewBoard = null;
-      renderer.setBoard(engine.board);
+      setRendererBoard(engine.board);
     }
     return;
   }
 
   settingsPreviewBoard = new Board(settings);
-  renderer.setBoard(settingsPreviewBoard);
+  setRendererBoard(settingsPreviewBoard);
 }
 
 function needsBoardPreview(settings: GameSettings): boolean {
@@ -963,6 +1411,7 @@ function syncSettingsToForm(settings: GameSettings): void {
   totalTimerInput.checked = settings.totalTimerEnabled;
   totalMinutesInput.value = String(Math.round(settings.totalSeconds / 60));
   totalMinutesOutput.value = String(Math.round(settings.totalSeconds / 60));
+  updateTopologyUI(settings);
 }
 
 function setStartingPlayerChoice(player: Player): void {
@@ -1055,6 +1504,49 @@ function saveStoredSettings(settings: GameSettings): void {
   } catch {
     // Storage can be unavailable in private contexts; the running match still keeps the settings.
   }
+}
+
+function loadStoredRenderMode(): '2d' | '3d' {
+  try {
+    return window.localStorage.getItem(RENDER_MODE_STORAGE_KEY) === '2d' ? '2d' : '3d';
+  } catch {
+    return '3d';
+  }
+}
+
+function saveStoredRenderMode(mode: '2d' | '3d'): void {
+  try {
+    window.localStorage.setItem(RENDER_MODE_STORAGE_KEY, mode);
+  } catch {
+    // The mode still applies for the current session when storage is unavailable.
+  }
+}
+
+async function recordPageVisit(): Promise<void> {
+  const visitId = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    const response = await fetch('/api/visits', {
+      method: 'POST',
+      headers: { 'X-Visit-Id': visitId }
+    });
+    if (!response.ok) throw new Error(`Visit counter returned ${response.status}`);
+    const payload = await response.json() as { count?: number };
+    if (!Number.isFinite(payload.count) || (payload.count ?? 0) < 0) throw new Error('Invalid visit count');
+    const count = Math.floor(payload.count ?? 0);
+    visitCountValue.textContent = formatVisitCount(count);
+    visitCount.title = `已被浏览 ${count.toLocaleString('zh-CN')} 次`;
+    visitCount.hidden = false;
+  } catch {
+    visitCount.hidden = true;
+  }
+}
+
+function formatVisitCount(count: number): string {
+  if (count < 1_000) return String(count);
+  if (count < 10_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return `${Math.round(count / 1_000)}k`;
 }
 
 function query<T extends HTMLElement>(selector: string): T {

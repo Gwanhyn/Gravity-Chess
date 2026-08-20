@@ -9,6 +9,8 @@ import type {
   Position,
   ReplayFrame
 } from '../core/types';
+import type { GameRenderer, RenderState } from './types';
+import { ACTIVE_SHOWCASE_THEME } from '../showcaseTheme';
 
 const PERSPECTIVE_REVEAL = 1 / 3;
 
@@ -59,7 +61,7 @@ interface FlashAnimation {
   duration: number;
 }
 
-export class CanvasRenderer {
+export class CanvasRenderer implements GameRenderer {
   private ctx: CanvasRenderingContext2D;
   private hoverCol: number | null = null;
   private layout: Layout = {
@@ -104,6 +106,10 @@ export class CanvasRenderer {
     this.resize();
   }
 
+  sync(_state: RenderState): void {
+    // Canvas reads the live engine context each frame; this keeps the renderer contract shared with Three.js.
+  }
+
   setReplayFrame(frame: ReplayFrame | null): void {
     this.replayFrame = frame;
     this.hoverCol = null;
@@ -131,17 +137,17 @@ export class CanvasRenderer {
     return Math.min(this.board.cols - 1, Math.max(0, Math.floor((x - originX) / cell)));
   }
 
-  animateMove(outcome: MoveOutcome): Promise<void> {
-    if (!outcome.ok || !outcome.position || !outcome.player) {
-      if (outcome.kind === 'flip') return this.animateFlash();
+  animateMove(resolvedOutcome: MoveOutcome, _before?: RenderState, _after?: RenderState): Promise<void> {
+    if (!resolvedOutcome.ok || !resolvedOutcome.position || !resolvedOutcome.player) {
+      if (resolvedOutcome.kind === 'flip') return this.animateFlash();
       return Promise.resolve();
     }
 
-    if (outcome.kind === 'bomb') {
-      return this.animateBomb(outcome.position, outcome.player);
+    if (resolvedOutcome.kind === 'bomb') {
+      return this.animateBomb(resolvedOutcome.position, resolvedOutcome.player);
     }
 
-    return this.animateDrop(outcome.position, outcome.player);
+    return this.animateDrop(resolvedOutcome.position, resolvedOutcome.player);
   }
 
   animateFlash(): Promise<void> {
@@ -246,7 +252,7 @@ export class CanvasRenderer {
     this.drawGhost(context, gravity);
     this.drawFalling(time);
     this.drawBlasts(time);
-    this.drawWinLine(winLine, status, winner, time);
+    this.drawWinLine(winLine, status, winner, time, context.wrapHorizontal, context.wrapVertical);
     this.drawFlash(time);
 
     this.frameHandle = window.requestAnimationFrame((nextTime) => this.draw(nextTime));
@@ -254,19 +260,19 @@ export class CanvasRenderer {
 
   private drawBackground(scoreSkew: number): void {
     const { width, height } = this.layout;
-    const redAlpha = Math.max(0, scoreSkew) * 0.16;
-    const goldAlpha = Math.max(0, -scoreSkew) * 0.16;
+    const blueAlpha = Math.max(0, scoreSkew) * 0.16;
+    const amberAlpha = Math.max(0, -scoreSkew) * 0.16;
 
     const gradient = this.ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, `rgba(238, 91, 91, ${0.08 + redAlpha})`);
-    gradient.addColorStop(0.5, 'rgba(249, 251, 255, 0.96)');
-    gradient.addColorStop(1, `rgba(239, 183, 68, ${0.08 + goldAlpha})`);
+    gradient.addColorStop(0, `rgba(29, 93, 165, ${0.22 + blueAlpha})`);
+    gradient.addColorStop(0.5, 'rgba(13, 25, 32, 0.98)');
+    gradient.addColorStop(1, `rgba(139, 91, 23, ${0.18 + amberAlpha})`);
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, width, height);
 
     this.ctx.save();
     this.ctx.globalAlpha = 0.22;
-    this.ctx.fillStyle = '#334155';
+    this.ctx.fillStyle = '#6b858a';
     for (let i = 0; i < 18; i += 1) {
       const x = (i * 97) % width;
       const y = (i * 151) % height;
@@ -282,16 +288,16 @@ export class CanvasRenderer {
     const origin = this.boardOrigin(offsetX, offsetY);
     this.ctx.save();
     this.ctx.globalAlpha = alpha;
-    this.ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.38)';
     this.ctx.shadowBlur = offsetX === 0 && offsetY === 0 ? 24 : 10;
     this.ctx.shadowOffsetY = offsetX === 0 && offsetY === 0 ? 12 : 4;
     this.roundRect(origin.x - cell * 0.1, origin.y - cell * 0.1, width + cell * 0.2, height + cell * 0.2, 18);
-    this.ctx.fillStyle = '#253047';
+    this.ctx.fillStyle = '#1a2a32';
     this.ctx.fill();
 
     this.ctx.shadowColor = 'transparent';
     this.roundRect(origin.x, origin.y, width, height, 14);
-    this.ctx.fillStyle = '#30415f';
+    this.ctx.fillStyle = '#2b3e46';
     this.ctx.fill();
     this.ctx.restore();
   }
@@ -315,9 +321,9 @@ export class CanvasRenderer {
     const { originX, originY, cell } = this.layout;
     this.ctx.save();
     this.roundRect(originX + this.hoverCol * cell + cell * 0.08, originY + cell * 0.08, cell * 0.84, cell * this.board.rows - cell * 0.16, 12);
-    this.ctx.fillStyle = 'rgba(92, 200, 255, 0.16)';
+    this.ctx.fillStyle = 'rgba(139, 207, 200, 0.14)';
     this.ctx.fill();
-    this.ctx.strokeStyle = 'rgba(92, 200, 255, 0.45)';
+    this.ctx.strokeStyle = 'rgba(139, 207, 200, 0.48)';
     this.ctx.lineWidth = 2;
     this.ctx.stroke();
     this.ctx.restore();
@@ -404,37 +410,75 @@ export class CanvasRenderer {
     });
   }
 
-  private drawWinLine(line: Position[], status: GameStatus, winner: Player | null, time: number): void {
+  private drawWinLine(
+    line: Position[],
+    status: GameStatus,
+    winner: Player | null,
+    time: number,
+    wrapHorizontal: boolean,
+    wrapVertical: boolean
+  ): void {
     if (status !== 'won' || !winner || line.length === 0) return;
 
     const pulse = 0.5 + Math.sin(time / 130) * 0.5;
     const centers = line.map((cell) => this.centerOf(cell.row, cell.col));
+    const segments: Array<[{ x: number; y: number }, { x: number; y: number }]> = [];
 
-    this.ctx.save();
-    this.ctx.strokeStyle = winner === 1 ? '#ffeff0' : '#fff7d6';
-    this.ctx.lineWidth = Math.max(5, this.layout.cell * 0.1);
-    this.ctx.lineCap = 'round';
-    this.ctx.lineJoin = 'round';
-    this.ctx.shadowColor = winner === 1 ? '#ff4263' : '#f8c33b';
-    this.ctx.shadowBlur = 16 + pulse * 14;
+    for (let index = 1; index < centers.length; index += 1) {
+      const previousCell = line[index - 1];
+      const currentCell = line[index];
+      const previous = centers[index - 1];
+      const current = centers[index];
+      const colStep = wrapStep(currentCell.col - previousCell.col, this.board.cols, wrapHorizontal);
+      const rowStep = wrapStep(currentCell.row - previousCell.row, this.board.rows, wrapVertical);
+      const expected = { x: colStep * this.layout.cell, y: rowStep * this.layout.cell };
+      const actual = { x: current.x - previous.x, y: current.y - previous.y };
 
-    if (centers.length > 1) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(centers[0].x, centers[0].y);
-      for (let index = 1; index < centers.length; index += 1) {
-        const previous = centers[index - 1];
-        const current = centers[index];
-        const distance = Math.hypot(current.x - previous.x, current.y - previous.y);
-        if (distance > this.layout.cell * 1.65) {
-          this.ctx.moveTo(current.x, current.y);
-        } else {
-          this.ctx.lineTo(current.x, current.y);
-        }
+      if (Math.hypot(actual.x - expected.x, actual.y - expected.y) < 1) {
+        segments.push([previous, current]);
+        continue;
       }
-      this.ctx.stroke();
+
+      const length = Math.max(1, Math.hypot(expected.x, expected.y));
+      const direction = { x: expected.x / length, y: expected.y / length };
+      const stubLength = this.layout.cell * 0.82;
+      segments.push([
+        previous,
+        { x: previous.x + direction.x * stubLength, y: previous.y + direction.y * stubLength }
+      ]);
+      segments.push([
+        { x: current.x - direction.x * stubLength, y: current.y - direction.y * stubLength },
+        current
+      ]);
     }
 
+    this.ctx.save();
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+    this.ctx.shadowColor = winner === 1 ? ACTIVE_SHOWCASE_THEME.playerAHighlightCss : ACTIVE_SHOWCASE_THEME.playerBHighlightCss;
+    this.ctx.shadowBlur = 16 + pulse * 14;
+
+    const drawSegments = (color: string, width: number) => {
+      this.ctx.strokeStyle = color;
+      this.ctx.lineWidth = width;
+      this.ctx.beginPath();
+      for (const [start, end] of segments) {
+        this.ctx.moveTo(start.x, start.y);
+        this.ctx.lineTo(end.x, end.y);
+      }
+      this.ctx.stroke();
+    };
+
+    drawSegments(winner === 1 ? ACTIVE_SHOWCASE_THEME.playerADarkCss : ACTIVE_SHOWCASE_THEME.playerBDarkCss, Math.max(10, this.layout.cell * 0.18));
+    drawSegments(winner === 1 ? ACTIVE_SHOWCASE_THEME.playerAHighlightCss : ACTIVE_SHOWCASE_THEME.playerBHighlightCss, Math.max(5, this.layout.cell * 0.085));
+
     for (const center of centers) {
+      this.ctx.fillStyle = winner === 1 ? `rgba(74, 158, 255, ${0.12 + pulse * 0.1})` : `rgba(217, 154, 50, ${0.12 + pulse * 0.1})`;
+      this.ctx.beginPath();
+      this.ctx.arc(center.x, center.y, this.layout.radius * 1.2, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.strokeStyle = winner === 1 ? ACTIVE_SHOWCASE_THEME.playerAHighlightCss : ACTIVE_SHOWCASE_THEME.playerBHighlightCss;
+      this.ctx.lineWidth = Math.max(4, this.layout.cell * 0.065);
       this.ctx.beginPath();
       this.ctx.arc(center.x, center.y, this.layout.radius * (1.12 + pulse * 0.12), 0, Math.PI * 2);
       this.ctx.stroke();
@@ -456,14 +500,14 @@ export class CanvasRenderer {
 
   private drawHole(x: number, y: number): void {
     const gradient = this.ctx.createRadialGradient(x, y, this.layout.radius * 0.2, x, y, this.layout.radius * 1.2);
-    gradient.addColorStop(0, '#edf3fb');
-    gradient.addColorStop(1, '#d6e0ec');
+    gradient.addColorStop(0, '#38525a');
+    gradient.addColorStop(1, '#102027');
     this.ctx.save();
     this.ctx.fillStyle = gradient;
     this.ctx.beginPath();
     this.ctx.arc(x, y, this.layout.radius * 1.03, 0, Math.PI * 2);
     this.ctx.fill();
-    this.ctx.strokeStyle = 'rgba(15, 23, 42, 0.22)';
+    this.ctx.strokeStyle = 'rgba(174, 207, 207, 0.24)';
     this.ctx.lineWidth = 2;
     this.ctx.stroke();
     this.ctx.restore();
@@ -486,18 +530,18 @@ export class CanvasRenderer {
   private drawPiece(x: number, y: number, player: Player, alpha: number, radius: number): void {
     const gradient = this.ctx.createRadialGradient(x - radius * 0.32, y - radius * 0.32, radius * 0.08, x, y, radius);
     if (player === 1) {
-      gradient.addColorStop(0, '#ffe0e6');
-      gradient.addColorStop(0.45, '#ef476f');
-      gradient.addColorStop(1, '#9f1239');
+      gradient.addColorStop(0, ACTIVE_SHOWCASE_THEME.playerAHighlightCss);
+      gradient.addColorStop(0.45, ACTIVE_SHOWCASE_THEME.playerACss);
+      gradient.addColorStop(1, ACTIVE_SHOWCASE_THEME.playerADarkCss);
     } else {
-      gradient.addColorStop(0, '#fff8cf');
-      gradient.addColorStop(0.5, '#f2b84b');
-      gradient.addColorStop(1, '#b45309');
+      gradient.addColorStop(0, ACTIVE_SHOWCASE_THEME.playerBHighlightCss);
+      gradient.addColorStop(0.5, ACTIVE_SHOWCASE_THEME.playerBCss);
+      gradient.addColorStop(1, ACTIVE_SHOWCASE_THEME.playerBDarkCss);
     }
 
     this.ctx.save();
     this.ctx.globalAlpha = alpha;
-    this.ctx.shadowColor = player === 1 ? 'rgba(239, 71, 111, 0.55)' : 'rgba(242, 184, 75, 0.55)';
+    this.ctx.shadowColor = player === 1 ? 'rgba(74, 158, 255, 0.52)' : 'rgba(217, 154, 50, 0.46)';
     this.ctx.shadowBlur = 10;
     this.ctx.fillStyle = gradient;
     this.ctx.beginPath();
@@ -520,7 +564,7 @@ export class CanvasRenderer {
     this.ctx.arc(x, y, radius * 0.88, 0, Math.PI * 2);
     this.ctx.fill();
     this.ctx.shadowColor = 'transparent';
-    this.ctx.strokeStyle = player === 1 ? '#fb7185' : '#facc15';
+    this.ctx.strokeStyle = player === 1 ? '#4a9eff' : '#d99a32';
     this.ctx.lineWidth = 4;
     this.ctx.beginPath();
     this.ctx.arc(x, y, radius * 0.58, -0.2, Math.PI * 1.45);
@@ -628,4 +672,11 @@ function easeOutBounce(value: number): number {
   }
   const adjusted = value - 2.625 / d1;
   return n1 * adjusted * adjusted + 0.984375;
+}
+
+function wrapStep(delta: number, size: number, enabled: boolean): number {
+  if (!enabled || size <= 0) return delta;
+  if (delta > size / 2) return delta - size;
+  if (delta < -size / 2) return delta + size;
+  return delta;
 }

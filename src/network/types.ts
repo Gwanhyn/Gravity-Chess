@@ -25,10 +25,12 @@ export interface OnlineRoomState {
 }
 
 export interface OnlineAction {
-  kind: 'drop' | 'check' | 'flip' | 'undo-request' | 'undo-accept' | 'undo-decline' | 'reset';
+  kind: 'drop' | 'check' | 'flip' | 'undo-request' | 'undo-accept' | 'undo-decline' | 'reset' | 'topology';
   col?: number;
   mode?: ActionMode;
   settings?: GameSettings;
+  wrapHorizontal?: boolean;
+  wrapVertical?: boolean;
 }
 
 export interface OnlineError {

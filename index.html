@@ -3,84 +3,152 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>重力棋</title>
+    <meta name="theme-color" content="#080d12" />
+    <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" sizes="any" />
+    <title>Gravity Chess</title>
   </head>
   <body>
-    <div id="app" class="app-shell">
-      <aside class="panel panel-primary">
-        <header class="brand">
-          <div>
-            <p class="eyebrow">Gravity Chess</p>
-            <h1>重力棋</h1>
-          </div>
-          <div class="brand-actions">
-            <button id="settingsToggleBtn" class="icon-command subtle" type="button" title="设置">
-              <i data-lucide="settings"></i>
-            </button>
-            <button id="howToPlayBtn" class="icon-command help-command" type="button" title="玩法说明">
-              <i data-lucide="circle-help"></i>
-            </button>
-          </div>
-        </header>
+    <main id="landingView" class="landing-view" aria-labelledby="landingTitle">
+      <canvas id="heroCanvas" class="hero-canvas" aria-label="Gravity Chess 3D 棋盘演示" data-hero-status="initializing"></canvas>
+      <p id="heroLoading" class="hero-loading" aria-live="polite">LOADING 3D BOARD</p>
+      <div class="landing-chrome">
+        <a class="landing-brand" href="https://teddytales.fun" aria-label="TeddyTales project center">
+          <img src="/brand/logo-mark-light.svg" alt="" />
+          <span>TeddyTales</span>
+        </a>
+        <span class="landing-mode">A BOARD WITH GRAVITY</span>
+      </div>
+      <div class="landing-copy">
+        <p class="landing-kicker">SPACE · BOARD · PIECES</p>
+        <h1 id="landingTitle">GRAVITY CHESS</h1>
+        <p class="landing-subtitle">重力棋</p>
+        <p class="landing-lede">让每一步，落得更有分量。</p>
+        <a id="startGameLink" class="landing-cta" href="/play">开始游戏 <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="landing-footer"><span>5 × 7 · 4 IN A ROW</span></div>
+    </main>
 
-        <section class="status-block">
+    <div id="app" class="app-shell game-app" hidden>
+      <header class="app-header">
+        <div class="brand-lockup" aria-label="Gravity Chess 重力棋">
+          <a class="brand-home-link" href="https://teddytales.fun" aria-label="TeddyTales project center">
+            <img class="brand-mark" src="/brand/logo-mark.svg" alt="" />
+          </a>
+          <a class="brand-product-link" href="/" aria-label="Gravity Chess home">
+            <span class="brand-copy">
+            <span class="brand-name">GRAVITY CHESS</span>
+            <span class="brand-subtitle">重力棋</span>
+            </span>
+          </a>
+          <span id="visitCount" class="visit-count" title="游戏访问次数" hidden>
+            <i data-lucide="eye"></i>
+            <span id="visitCountValue">--</span>
+          </span>
+        </div>
+        <nav class="header-actions" aria-label="游戏导航">
+          <span id="mobileStatus" class="mobile-status" aria-live="polite">蓝方行动</span>
+          <div class="match-menu-wrap">
+            <button id="matchMenuBtn" class="match-trigger" type="button" aria-expanded="false" aria-controls="matchMenu">
+              对战
+              <i data-lucide="chevron-down"></i>
+            </button>
+            <section id="matchMenu" class="match-menu" aria-label="选择对战方式" hidden>
+              <div class="match-menu-head">
+                <p>对战</p>
+                <button id="matchMenuCloseBtn" class="icon-command subtle compact" type="button" title="关闭对战菜单">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
+              <button id="battleAiBtn" class="match-choice active" type="button">
+                <i data-lucide="bot"></i>
+                <span><strong>与 AI 对战</strong><small>一个人，直接开始</small></span>
+              </button>
+              <button id="battleLocalBtn" class="match-choice" type="button">
+                <i data-lucide="users"></i>
+                <span><strong>本地双人</strong><small>两个人使用同一设备</small></span>
+              </button>
+              <button id="battleOnlineBtn" class="match-choice online-choice" type="button">
+                <i data-lucide="wifi"></i>
+                <span><strong>联机模式</strong><small>创建或加入房间</small></span>
+                <i class="choice-arrow" data-lucide="arrow-right"></i>
+              </button>
+              <div id="battleOnlinePanel" class="battle-online-panel" hidden>
+                <div class="battle-online-state">
+                  <span id="battleOnlineStatus">未加入房间</span>
+                  <strong id="battleCurrentRoomCode">----</strong>
+                </div>
+                <button id="battleHostBtn" class="text-command" type="button">创建新房间</button>
+                <div class="battle-join-row">
+                  <input id="battleRoomCodeInput" type="text" maxlength="4" placeholder="房间码" aria-label="房间码" />
+                  <button id="battleJoinBtn" class="text-command muted" type="button">加入</button>
+                </div>
+                <button id="battleLeaveBtn" class="text-command muted battle-leave-button" type="button">退出联机</button>
+              </div>
+            </section>
+          </div>
+          <div class="match-menu-wrap">
+            <button id="boardMenuBtn" class="match-trigger" type="button" aria-expanded="false" aria-controls="boardMenu">
+              棋盘
+              <i data-lucide="chevron-down"></i>
+            </button>
+            <section id="boardMenu" class="match-menu board-menu" aria-label="选择棋盘连接" hidden>
+              <div class="match-menu-head">
+                <p>棋盘</p>
+                <button id="boardMenuCloseBtn" class="icon-command subtle compact" type="button" title="关闭棋盘菜单">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
+              <div class="board-type-options" role="group" aria-label="棋盘类型">
+                <button class="match-choice board-choice" type="button" data-header-topology="standard">普通</button>
+                <button class="match-choice board-choice" type="button" data-header-topology="horizontal">横环</button>
+                <button class="match-choice board-choice" type="button" data-header-topology="vertical">纵环</button>
+                <button class="match-choice board-choice" type="button" data-header-topology="toroidal">环面</button>
+              </div>
+              <div class="board-menu-divider" aria-hidden="true"></div>
+              <button id="boardPerspectiveBtn" class="match-choice board-choice board-perspective-choice active" type="button" aria-pressed="true">透视展示</button>
+            </section>
+          </div>
+          <button id="settingsToggleBtn" class="icon-command subtle settings-command" type="button" title="设置" aria-label="设置" aria-expanded="false">
+            <i data-lucide="settings"></i>
+          </button>
+        </nav>
+      </header>
+
+      <aside id="controlRail" class="control-rail" aria-label="对局信息和操作">
+        <section class="turn-status" aria-live="polite">
           <div class="player-token" id="currentToken"></div>
           <div>
             <p class="status-label">当前回合</p>
-            <p id="statusText" class="status-text">红方行动</p>
+          <p id="statusText" class="status-text">蓝方行动</p>
           </div>
         </section>
 
         <section class="timer-grid" aria-label="计时器">
-          <div class="timer-card player-red">
-            <span>红方</span>
-            <strong id="redClock">--:--</strong>
-          </div>
-          <div class="timer-card player-gold">
-            <span>金方</span>
-            <strong id="goldClock">--:--</strong>
-          </div>
-          <div class="timer-card turn-clock">
-            <span>步时</span>
-            <strong id="turnClock">--</strong>
-          </div>
+          <div class="timer-card player-blue"><span>蓝方</span><strong id="redClock">--:--</strong></div>
+          <div class="timer-card player-yellow"><span>黄方</span><strong id="goldClock">--:--</strong></div>
+          <div class="timer-card"><span>步时</span><strong id="turnClock">--</strong></div>
         </section>
 
-        <section class="action-grid">
-          <button id="dropModeBtn" class="mode-btn active" type="button" title="普通落子">
-            <i data-lucide="circle-dot"></i>
-            <span>落子</span>
-          </button>
-          <button id="checkWinBtn" class="mode-btn" type="button" title="手动获胜检查">
-            <i data-lucide="badge-check"></i>
-            <span>查胜</span>
-          </button>
-          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹：清除落点真实棋盘3x3范围内的棋子">
-            <i data-lucide="bomb"></i>
-            <span>炸弹</span>
-          </button>
-          <button id="flipBtn" class="mode-btn" type="button" title="重力反转">
-            <i data-lucide="arrow-down-up"></i>
-            <span>反转</span>
-          </button>
+        <section class="primary-actions" aria-label="核心操作">
+          <button id="undoBtn" class="action-command" type="button" title="悔棋"><i data-lucide="undo-2"></i><span>悔棋</span></button>
+          <button id="replayBtn" class="action-command" type="button" title="复盘"><i data-lucide="play"></i><span>复盘</span></button>
+          <button id="newGameBtn" class="action-command primary" type="button" title="新对局"><i data-lucide="refresh-cw"></i><span>新局</span></button>
         </section>
 
-        <section class="command-row">
-          <button id="undoBtn" class="icon-command" type="button" title="悔棋">
-            <i data-lucide="undo-2"></i>
-          </button>
-          <button id="replayBtn" class="icon-command" type="button" title="复盘">
-            <i data-lucide="play"></i>
-          </button>
-          <button id="newGameBtn" class="icon-command primary" type="button" title="新对局">
-            <i data-lucide="refresh-cw"></i>
-          </button>
+        <section class="secondary-actions" aria-label="特殊操作">
+          <button id="dropModeBtn" class="mode-btn active" type="button" title="普通落子"><i data-lucide="circle-dot"></i><span>落子</span></button>
+          <button id="checkWinBtn" class="mode-btn" type="button" title="手动检查胜利"><i data-lucide="badge-check"></i><span>查胜</span></button>
+          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹棋子"><i data-lucide="bomb"></i><span>炸弹</span></button>
+          <button id="flipBtn" class="mode-btn" type="button" title="重力反转"><i data-lucide="arrow-down-up"></i><span>反转</span></button>
         </section>
 
-        <section class="move-log" aria-label="棋谱">
+        <section id="moveLogSection" class="move-log" aria-label="棋谱">
           <div class="section-head">
-            <h2>棋谱</h2>
-            <span id="moveCount">0</span>
+            <button id="moveLogToggle" class="section-toggle" type="button" aria-expanded="true">
+              <span>棋谱</span>
+              <small><b id="moveCount">0</b> 手</small>
+              <i data-lucide="chevron-up"></i>
+            </button>
           </div>
           <ol id="moveList"></ol>
         </section>
@@ -88,274 +156,87 @@
 
       <main class="board-stage">
         <div class="board-topline">
-          <div id="modeSummary" class="badge-row"></div>
-          <div id="winnerLine" class="winner-line"></div>
+          <div id="modeSummary" class="match-summary"></div>
         </div>
-        <div class="canvas-shell" id="canvasShell">
-          <canvas id="gameCanvas" aria-label="重力棋棋盘"></canvas>
+        <div class="board-frame">
+          <div class="canvas-shell" id="canvasShell" data-render-mode="3d">
+            <div class="render-mode-switch" role="group" aria-label="棋盘视图">
+              <button id="threeModeBtn" class="render-mode-btn active" type="button" aria-pressed="true">3D</button>
+              <button id="canvasModeBtn" class="render-mode-btn" type="button" aria-pressed="false">2D</button>
+            </div>
+            <canvas id="gameCanvas" aria-label="重力棋棋盘"></canvas>
+            <div id="threeViewport" class="three-viewport" aria-label="Gravity Chess 3D 棋盘" hidden></div>
+          </div>
         </div>
       </main>
 
-      <aside id="settingsDrawer" class="panel settings-panel settings-drawer">
+      <aside id="settingsDrawer" class="settings-drawer" aria-label="设置" aria-hidden="true">
         <div class="drawer-head">
-          <div>
-            <p class="eyebrow">Match Setup</p>
-            <h2>设置</h2>
-          </div>
-          <button id="settingsCloseBtn" class="icon-command subtle" type="button" title="关闭设置">
-            <i data-lucide="x"></i>
-          </button>
+          <div><p class="eyebrow">Explore &amp; Adjust</p><h2>设置</h2></div>
+          <button id="settingsCloseBtn" class="icon-command subtle" type="button" title="关闭设置"><i data-lucide="x"></i></button>
         </div>
-        <section>
-          <div class="section-head">
-            <h2>基础设置</h2>
-            <button id="applySettingsBtn" class="text-command" type="button">应用</button>
-          </div>
-          <div class="field-grid">
-            <label>
-              <span>行</span>
-              <input id="rowsInput" type="number" min="4" max="12" value="5" />
-            </label>
-            <label>
-              <span>列</span>
-              <input id="colsInput" type="number" min="4" max="12" value="7" />
-            </label>
-            <label>
-              <span>连珠</span>
-              <input id="winInput" type="number" min="3" max="8" value="4" />
-            </label>
-          </div>
-          <label class="toggle-row">
-            <span>步时</span>
-            <input id="turnTimerInput" type="checkbox" />
-          </label>
-          <label id="turnTimerConfig" class="rule-config range-field">
-            <span>秒</span>
-            <input id="turnSecondsInput" type="range" min="5" max="60" value="20" />
-            <output id="turnSecondsOutput">20</output>
-          </label>
+
+        <section class="settings-section" id="matchSettingsSection">
+          <div class="settings-section-head"><h3>对战</h3></div>
+          <label class="select-field compact-field"><span>对战方式</span><select id="modeSelect"><option value="ai">本地人机</option><option value="local">本地双人</option></select></label>
+          <label class="select-field compact-field"><span>AI 难度</span><select id="difficultySelect"><option value="easy">简单</option><option value="medium">中等</option><option value="hard">困难</option></select></label>
+          <div class="segmented-field compact-field" role="group" aria-label="先手设置"><span>先手</span><div class="segmented-control"><button id="redFirstBtn" class="segment-btn active" type="button">蓝方</button><button id="goldFirstBtn" class="segment-btn" type="button">黄方</button></div></div>
         </section>
 
-        <section>
-          <div class="section-head">
-            <h2>对战</h2>
+        <section class="settings-section">
+          <div class="settings-section-head"><h3>棋盘</h3><button id="applySettingsBtn" class="text-command" type="button">应用新局</button></div>
+          <div class="field-grid board-dimensions">
+            <label><span>行</span><input id="rowsInput" type="number" min="4" max="12" value="5" /></label>
+            <label><span>列</span><input id="colsInput" type="number" min="4" max="12" value="7" /></label>
+            <label><span>连珠</span><input id="winInput" type="number" min="3" max="8" value="4" /></label>
           </div>
-          <label class="select-field">
-            <span>模式</span>
-            <select id="modeSelect">
-              <option value="local">本地双人</option>
-              <option value="ai">人机对战</option>
-            </select>
-          </label>
-          <div class="segmented-field" role="group" aria-label="先手设置">
-            <span>先手</span>
-            <div class="segmented-control">
-              <button id="redFirstBtn" class="segment-btn active" type="button">红方</button>
-              <button id="goldFirstBtn" class="segment-btn" type="button">金方</button>
-            </div>
+          <div class="topology-heading"><span>棋盘连接</span><small id="topologySummary">标准棋盘</small></div>
+          <div id="topologyChoices" class="topology-choices" role="group" aria-label="棋盘连接">
+            <button class="topology-choice active" type="button" data-topology="standard"><i class="topology-map standard" aria-hidden="true"><span></span></i><span>标准棋盘<small>边界不相连</small></span></button>
+            <button class="topology-choice" type="button" data-topology="horizontal"><i class="topology-map horizontal" aria-hidden="true"><span></span></i><span>左右环通<small>左右两侧相连</small></span></button>
+            <button class="topology-choice" type="button" data-topology="vertical"><i class="topology-map vertical" aria-hidden="true"><span></span></i><span>上下环通<small>上下两侧相连</small></span></button>
+            <button class="topology-choice featured" type="button" data-topology="toroidal"><i class="topology-map toroidal" aria-hidden="true"><span></span></i><span>环形棋盘<small>四周全部相连</small></span><b>✦</b></button>
           </div>
-          <label class="select-field">
-            <span>AI</span>
-            <select id="difficultySelect">
-              <option value="easy">简单</option>
-              <option value="medium">中等</option>
-              <option value="hard">困难</option>
-            </select>
-          </label>
+          <input id="wrapHorizontalInput" type="checkbox" class="visually-hidden" />
+          <input id="wrapVerticalInput" type="checkbox" class="visually-hidden" />
         </section>
 
-        <section>
-          <div class="section-head">
-            <h2>联机</h2>
-            <span id="onlineRoleBadge">离线</span>
-          </div>
-          <div class="online-box">
-            <p id="onlineStatus" class="online-status">本地模式</p>
-            <label class="select-field">
-              <span>房间码</span>
-              <input id="roomCodeInput" class="room-code-input" type="text" maxlength="4" placeholder="ABCD" />
-            </label>
-            <div class="online-actions">
-              <button id="hostRoomBtn" class="text-command" type="button">
-                <i data-lucide="wifi"></i>
-                <span>创建</span>
-              </button>
-              <button id="joinRoomBtn" class="text-command" type="button">
-                <i data-lucide="log-in"></i>
-                <span>加入</span>
-              </button>
-              <button id="leaveRoomBtn" class="text-command muted" type="button">
-                <i data-lucide="log-out"></i>
-                <span>离开</span>
-              </button>
-            </div>
-            <p id="shareUrl" class="share-url"></p>
-          </div>
+        <section class="settings-section">
+          <div class="settings-section-head"><h3>体验</h3></div>
+          <label class="toggle-row"><span>拓扑透视</span><input id="topologyPerspectiveInput" type="checkbox" /></label>
+          <label class="toggle-row"><span>自动查胜</span><input id="autoWinCheckInput" type="checkbox" checked /></label>
+          <label class="toggle-row"><span>步时</span><input id="turnTimerInput" type="checkbox" /></label>
+          <label id="turnTimerConfig" class="rule-config range-field"><span>秒</span><input id="turnSecondsInput" type="range" min="5" max="60" value="20" /><output id="turnSecondsOutput">20</output></label>
+          <label class="toggle-row"><span>总时长</span><input id="totalTimerInput" type="checkbox" /></label>
+          <label id="totalTimerConfig" class="rule-config range-field"><span>分</span><input id="totalMinutesInput" type="range" min="1" max="20" value="5" /><output id="totalMinutesOutput">5</output></label>
         </section>
 
-        <section>
-          <div class="section-head">
-            <h2>规则设置</h2>
-          </div>
-          <label class="toggle-row">
-            <span>左右联通</span>
-            <input id="wrapHorizontalInput" type="checkbox" />
-          </label>
-          <label class="toggle-row">
-            <span>上下联通</span>
-            <input id="wrapVerticalInput" type="checkbox" />
-          </label>
-          <label class="toggle-row">
-            <span>自动查胜</span>
-            <input id="autoWinCheckInput" type="checkbox" checked />
-          </label>
-          <label class="toggle-row">
-            <span>拓扑透视</span>
-            <input id="topologyPerspectiveInput" type="checkbox" />
-          </label>
-          <label class="toggle-row">
-            <span>随机障碍</span>
-            <input id="obstaclesInput" type="checkbox" />
-          </label>
-          <label id="obstacleConfig" class="rule-config select-field">
-            <span>障碍数量</span>
-            <input id="obstacleCountInput" type="number" min="1" max="8" value="2" />
-          </label>
-          <label class="toggle-row">
-            <span>炸弹棋子</span>
-            <input id="bombsInput" type="checkbox" />
-          </label>
-          <label id="bombLimitConfig" class="rule-config limit-field">
-            <span>炸弹次数</span>
-            <select id="bombLimitModeSelect">
-              <option value="limited">限制</option>
-              <option value="unlimited">不限</option>
-            </select>
-            <input id="bombLimitInput" type="number" min="1" max="9" value="1" />
-          </label>
-          <label class="toggle-row">
-            <span>重力反转</span>
-            <input id="gravityFlipInput" type="checkbox" />
-          </label>
-          <label id="gravityFlipLimitConfig" class="rule-config limit-field">
-            <span>反转次数</span>
-            <select id="gravityFlipLimitModeSelect">
-              <option value="limited">限制</option>
-              <option value="unlimited">不限</option>
-            </select>
-            <input id="gravityFlipLimitInput" type="number" min="1" max="9" value="1" />
-          </label>
-          <label class="toggle-row">
-            <span>总时长</span>
-            <input id="totalTimerInput" type="checkbox" />
-          </label>
-          <label id="totalTimerConfig" class="rule-config range-field">
-            <span>分</span>
-            <input id="totalMinutesInput" type="range" min="1" max="20" value="5" />
-            <output id="totalMinutesOutput">5</output>
-          </label>
+        <section id="onlineSettingsSection" class="settings-section online-section">
+          <div class="settings-section-head"><h3>在线对战</h3><span id="onlineRoleBadge">离线</span></div>
+          <p id="onlineStatus" class="online-status">创建房间或输入房间码加入。</p>
+          <button id="hostRoomBtn" class="text-command full-command" type="button"><i data-lucide="wifi"></i><span>创建房间</span></button>
+          <label class="room-code-field"><span>房间码</span><input id="roomCodeInput" class="room-code-input" type="text" maxlength="4" placeholder="ABCD" /></label>
+          <div class="online-actions"><button id="joinRoomBtn" class="text-command muted" type="button"><i data-lucide="log-in"></i><span>加入</span></button><button id="leaveRoomBtn" class="text-command muted" type="button"><i data-lucide="log-out"></i><span>离开</span></button></div>
+          <p id="shareUrl" class="share-url"></p>
         </section>
+
+        <details class="advanced-settings">
+          <summary>实验规则</summary>
+          <div class="advanced-settings-body">
+            <label class="toggle-row"><span>随机障碍</span><input id="obstaclesInput" type="checkbox" /></label>
+            <label id="obstacleConfig" class="rule-config select-field"><span>障碍数量</span><input id="obstacleCountInput" type="number" min="1" max="8" value="2" /></label>
+            <label class="toggle-row"><span>炸弹棋子</span><input id="bombsInput" type="checkbox" /></label>
+            <label id="bombLimitConfig" class="rule-config limit-field"><span>炸弹次数</span><select id="bombLimitModeSelect"><option value="limited">限制</option><option value="unlimited">不限</option></select><input id="bombLimitInput" type="number" min="1" max="9" value="1" /></label>
+            <label class="toggle-row"><span>重力反转</span><input id="gravityFlipInput" type="checkbox" /></label>
+            <label id="gravityFlipLimitConfig" class="rule-config limit-field"><span>反转次数</span><select id="gravityFlipLimitModeSelect"><option value="limited">限制</option><option value="unlimited">不限</option></select><input id="gravityFlipLimitInput" type="number" min="1" max="9" value="1" /></label>
+          </div>
+        </details>
       </aside>
     </div>
 
-    <div id="howToPlayDialog" class="how-to-dialog hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="howToPlayTitle">
-      <div class="how-to-card">
-        <header class="how-to-head">
-          <div>
-            <p class="eyebrow">Gravity Chess Guide</p>
-            <h2 id="howToPlayTitle">玩法说明</h2>
-          </div>
-          <button id="howToPlayCloseBtn" class="icon-command subtle" type="button" title="关闭玩法说明">
-            <i data-lucide="x"></i>
-          </button>
-        </header>
-
-        <div class="how-to-content">
-          <section class="how-to-intro">
-            <h3>🎯 重力棋 (Gravity Chess)</h3>
-            <p>
-              欢迎来到重力棋！这是一款在经典“四子棋”基础上，加入物理重力、空间折叠与心机博弈的变体对战游戏。
-            </p>
-          </section>
-
-          <section class="how-to-section">
-            <h3>🚩 基础获胜目标</h3>
-            <ul>
-              <li>双方轮流选择某一列落子，棋子会受<strong>重力影响</strong>自然下落并堆叠。</li>
-              <li>率先在横、竖、左斜或右斜方向上达成<strong>连珠</strong>的一方获胜，默认目标是 4 子。</li>
-            </ul>
-          </section>
-
-          <section class="how-to-section">
-            <h3>🌟 特色机制与博弈</h3>
-            <article>
-              <h4>1. 🌌 空间联通与拓扑透视</h4>
-              <p>如果房主开启联通模式，棋盘的边界将被打破。</p>
-              <ul>
-                <li><strong>左右联通</strong>：最左与最右相连，可以跨越左右边界完成连珠。</li>
-                <li><strong>上下联通</strong>：顶端与底端相连，棋路会变得更加反直觉。</li>
-                <li><strong>拓扑透视</strong>：主棋盘四周出现半透明镜像棋盘；你只能在中央主棋盘落子，镜像仅用于观察跨边界局势。</li>
-              </ul>
-            </article>
-
-            <article>
-              <h4>2. 🕵️‍♂️ 手动查胜</h4>
-              <p>关闭“自动查胜”后，系统不会主动宣布游戏结束。</p>
-              <ul>
-                <li>你必须在<strong>自己的回合</strong>主动点击【查胜】。</li>
-                <li>如果已经连珠，点击后立刻获胜。</li>
-                <li>如果看错了，不仅查胜失败，还会<strong>白白浪费掉这一回合</strong>。</li>
-                <li>查胜只检查点击者是否连珠，<strong>不会提醒对手</strong>。</li>
-              </ul>
-            </article>
-
-            <article>
-              <h4>3. 🙃 重力反转</h4>
-              <p>
-                开启后，每人每局默认有 1 次发动机会。发动时整个棋盘上下颠倒，所有棋子和障碍物会向相反方向坠落并重新堆叠。
-              </p>
-            </article>
-
-            <article>
-              <h4>4. 💣 炸弹与障碍</h4>
-              <ul>
-                <li><strong>炸弹棋子</strong>：落入后不参与连珠，而是炸毁落点周围真实棋盘 <strong>3 × 3</strong> 范围内的所有棋子。</li>
-                <li><strong>随机障碍</strong>：棋盘上会随机出现不可消除、不可跨越的死块，极其考验局部布局能力。</li>
-              </ul>
-            </article>
-          </section>
-
-          <section class="how-to-section">
-            <h3>🌐 局域网联机指南</h3>
-            <ol>
-              <li><strong>房主建房</strong>：在联机区域点击【创建】，获取 4 位房间码。</li>
-              <li><strong>好友加入</strong>：好友连上同一个 Wi-Fi，用浏览器打开房主提示的局域网 IP 地址，输入房间码点击【加入】。</li>
-              <li><strong>悔棋申请</strong>：联机悔棋需要向对方发送申请，对方同意后才会回退。</li>
-            </ol>
-          </section>
-
-          <p class="how-to-close-note">准备好让你的大脑在重力与空间中燃烧了吗？关掉说明，开始对局。</p>
-        </div>
-      </div>
-    </div>
-
     <div id="undoRequestDialog" class="undo-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="undoRequestTitle">
-      <div class="undo-dialog-card">
-        <p class="eyebrow">Undo Request</p>
-        <h2 id="undoRequestTitle">对方请求悔棋</h2>
-        <p id="undoRequestText" class="undo-request-text">是否同意回退上一步？</p>
-        <div class="undo-request-actions">
-          <button id="undoDeclineBtn" class="text-command muted" type="button">
-            <i data-lucide="x"></i>
-            <span>拒绝</span>
-          </button>
-          <button id="undoAcceptBtn" class="text-command" type="button">
-            <i data-lucide="check"></i>
-            <span>同意</span>
-          </button>
-        </div>
-      </div>
+      <div class="undo-dialog-card"><p class="eyebrow">Undo Request</p><h2 id="undoRequestTitle">对方请求悔棋</h2><p id="undoRequestText" class="undo-request-text">是否同意回退上一步？</p><div class="undo-request-actions"><button id="undoDeclineBtn" class="text-command muted" type="button"><i data-lucide="x"></i><span>拒绝</span></button><button id="undoAcceptBtn" class="text-command" type="button"><i data-lucide="check"></i><span>同意</span></button></div></div>
     </div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/landing.ts"></script>
   </body>
 </html>

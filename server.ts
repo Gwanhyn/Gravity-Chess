@@ -1,10 +1,10 @@
 import express from 'express';
+import { existsSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server, type Socket } from 'socket.io';
-import { createServer as createViteServer } from 'vite';
 import { GameEngine } from './src/core/GameEngine';
 import { DEFAULT_SETTINGS, otherPlayer, type GameSettings, type MoveOutcome, type Player } from './src/core/types';
 import type {
@@ -14,6 +14,7 @@ import type {
   ServerToClientEvents,
   UndoRequest
 } from './src/network/types';
+import { createVisitCounter } from './visitCounter';
 
 interface Room {
   code: string;
@@ -21,6 +22,7 @@ interface Room {
   sockets: Map<string, OnlineRole>;
   hostId: string;
   lastTick: number;
+  emptySince: number | null;
   pendingUndoRequest: UndoRequest | null;
 }
 
@@ -30,20 +32,49 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.argv.includes('--prod') || process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT ?? 5173);
 const host = process.env.HOST ?? '0.0.0.0';
+const roomEmptyTtlMs = readPositiveDuration(process.env.ROOM_EMPTY_TTL_MS, 5 * 60_000);
+const roomCleanupIntervalMs = readPositiveDuration(
+  process.env.ROOM_CLEANUP_INTERVAL_MS,
+  Math.min(60_000, roomEmptyTtlMs)
+);
 const rooms = new Map<string, Room>();
 const socketRooms = new Map<string, string>();
+const visitCounter = createVisitCounter();
 
 const app = express();
 const httpServer = createHttpServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer);
 
+app.get('/api/visits', async (_request, response) => {
+  try {
+    response.set('Cache-Control', 'no-store');
+    response.json({ count: await visitCounter.getCount() });
+  } catch {
+    response.status(500).json({ message: '访问次数暂时不可用' });
+  }
+});
+
+app.post('/api/visits', async (request, response) => {
+  try {
+    const rawVisitId = request.header('X-Visit-Id');
+    const visitId = rawVisitId?.slice(0, 128);
+    response.set('Cache-Control', 'no-store');
+    response.json({ count: await visitCounter.increment(visitId) });
+  } catch {
+    response.status(500).json({ message: '访问次数暂时不可用' });
+  }
+});
+
 if (isProd) {
-  const distPath = path.join(__dirname, 'dist');
+  // Production releases keep the bundled server and frontend in sibling folders.
+  const adjacentDistPath = path.join(__dirname, 'dist');
+  const distPath = existsSync(adjacentDistPath) ? adjacentDistPath : path.join(__dirname, '..', 'dist');
   app.use(express.static(distPath));
   app.get(/.*/, (_request, response) => {
     response.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
+  const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({
     server: {
       middlewareMode: true,
@@ -66,6 +97,7 @@ io.on('connection', (socket) => {
       sockets: new Map([[socket.id, 1]]),
       hostId: socket.id,
       lastTick: Date.now(),
+      emptySince: null,
       pendingUndoRequest: null
     };
 
@@ -79,7 +111,11 @@ io.on('connection', (socket) => {
     leaveCurrentRoom(socket);
 
     const code = rawCode.trim().toUpperCase();
-    const room = rooms.get(code);
+    let room = rooms.get(code);
+    if (room && isExpiredEmptyRoom(room, Date.now())) {
+      rooms.delete(code);
+      room = undefined;
+    }
     if (!room) {
       socket.emit('room:error', { message: '没有找到这个房间' });
       return;
@@ -87,6 +123,8 @@ io.on('connection', (socket) => {
 
     const role = nextRole(room);
     room.sockets.set(socket.id, role);
+    room.emptySince = null;
+    room.lastTick = Date.now();
     socketRooms.set(socket.id, code);
     socket.join(code);
     ensureHost(room);
@@ -128,6 +166,8 @@ io.on('connection', (socket) => {
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
+    if (room.sockets.size === 0) continue;
+
     const delta = Math.min(0.5, (now - room.lastTick) / 1000);
     room.lastTick = now;
     if (room.engine.tick(delta)) {
@@ -135,6 +175,13 @@ setInterval(() => {
     }
   }
 }, 250);
+
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    if (isExpiredEmptyRoom(room, now)) rooms.delete(room.code);
+  }
+}, roomCleanupIntervalMs);
 
 httpServer.listen(port, host, () => {
   const urls = getLanUrls(port);
@@ -152,6 +199,14 @@ function applyAction(room: Room, socket: GameSocket, role: Player, action: Onlin
     room.pendingUndoRequest = null;
     room.engine.reset(forceOnlineSettings(action.settings ?? room.engine.settings));
     return { ok: true, message: '房主已重开' };
+  }
+
+  if (action.kind === 'topology') {
+    if (socket.id !== room.hostId) {
+      return { ok: false, message: '只有房主可以切换棋盘' };
+    }
+    room.engine.setTopology(Boolean(action.wrapHorizontal), Boolean(action.wrapVertical));
+    return { ok: true, message: '棋盘连接已更新' };
   }
 
   if (action.kind === 'undo-request') {
@@ -263,7 +318,7 @@ function leaveCurrentRoom(socket: GameSocket): void {
   room.pendingUndoRequest = null;
   room.sockets.delete(socket.id);
   if (room.sockets.size === 0) {
-    rooms.delete(code);
+    room.emptySince = Date.now();
     return;
   }
 
@@ -287,9 +342,19 @@ function ensureHost(room: Room): void {
 
 function nextRole(room: Room): OnlineRole {
   const roles = new Set(room.sockets.values());
+  if (roles.size === 0) return 1;
   if (!roles.has(2)) return 2;
   if (!roles.has(1)) return 1;
   return 'spectator';
+}
+
+function isExpiredEmptyRoom(room: Room, now: number): boolean {
+  return room.sockets.size === 0 && room.emptySince !== null && now - room.emptySince >= roomEmptyTtlMs;
+}
+
+function readPositiveDuration(rawValue: string | undefined, fallback: number): number {
+  const value = Number(rawValue);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
 function getPlayers(room: Room) {

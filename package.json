@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "dev:lan": "tsx server.ts",
+    "bench:ai": "tsx scripts/ai-benchmark.ts",
     "build": "tsc && vite build",
     "build:pages": "tsc && vite build --base /Gravity-Chess/",
     "deploy": "npm run build:pages && gh-pages -d dist",
@@ -16,10 +17,12 @@
     "express": "^5.2.1",
     "lucide": "^0.468.0",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/three": "^0.185.4",
     "autoprefixer": "^10.4.20",
     "gh-pages": "^6.3.0",
     "postcss": "^8.4.49",
