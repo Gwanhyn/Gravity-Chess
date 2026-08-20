@@ -22,7 +22,7 @@
         <p class="landing-kicker">SPACE · BOARD · PIECES</p>
         <h1 id="landingTitle">GRAVITY CHESS</h1>
         <p class="landing-subtitle">重力棋</p>
-        <p class="landing-lede">让每一步，落得更有分量。</p>
+        <p class="landing-lede">让棋子下落、堆叠、连成四子......</p>
         <a id="startGameLink" class="landing-cta" href="/play">开始游戏 <span aria-hidden="true">↗</span></a>
       </div>
       <div class="landing-footer"><span>5 × 7 · 4 IN A ROW</span></div>
@@ -138,16 +138,14 @@
         <section class="secondary-actions" aria-label="辅助操作">
           <button id="dropModeBtn" class="mode-btn active" type="button" title="普通落子"><i data-lucide="circle-dot"></i><span>落子</span></button>
           <button id="checkWinBtn" class="mode-btn" type="button" title="手动检查胜利"><i data-lucide="badge-check"></i><span>查胜</span></button>
-          <button id="bombModeBtn" class="mode-btn" type="button" title="炸弹棋子" hidden><i data-lucide="bomb"></i><span>炸弹</span></button>
-          <button id="flipBtn" class="mode-btn" type="button" title="重力反转" hidden><i data-lucide="arrow-down-up"></i><span>反转</span></button>
         </section>
 
-        <section id="moveLogSection" class="move-log collapsed" aria-label="棋谱">
+        <section id="moveLogSection" class="move-log" aria-label="棋谱">
           <div class="section-head">
-            <button id="moveLogToggle" class="section-toggle" type="button" aria-expanded="false">
+            <button id="moveLogToggle" class="section-toggle" type="button" aria-expanded="true">
               <span>棋谱</span>
               <small><b id="moveCount">0</b> 手</small>
-              <i data-lucide="chevron-down"></i>
+              <i data-lucide="chevron-up"></i>
             </button>
           </div>
           <ol id="moveList"></ol>

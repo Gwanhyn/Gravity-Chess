@@ -1,9 +1,7 @@
 import {
   ArrowRight,
-  ArrowDownUp,
   BadgeCheck,
   Bot,
-  Bomb,
   ChevronDown,
   ChevronUp,
   Check,
@@ -172,16 +170,12 @@ const undoDeclineBtn = query<HTMLButtonElement>('#undoDeclineBtn');
 
 const dropModeBtn = query<HTMLButtonElement>('#dropModeBtn');
 const checkWinBtn = query<HTMLButtonElement>('#checkWinBtn');
-const bombModeBtn = query<HTMLButtonElement>('#bombModeBtn');
-const flipBtn = query<HTMLButtonElement>('#flipBtn');
 const undoBtn = query<HTMLButtonElement>('#undoBtn');
 const replayBtn = query<HTMLButtonElement>('#replayBtn');
 const newGameBtn = query<HTMLButtonElement>('#newGameBtn');
 const applySettingsBtn = query<HTMLButtonElement>('#applySettingsBtn');
 const lucideIcons = {
-  ArrowDownUp,
   BadgeCheck,
-  Bomb,
   Check,
   CircleDot,
   Eye,
@@ -233,21 +227,9 @@ function wireEvents(): void {
     updateUI();
   });
 
-  bombModeBtn.addEventListener('click', () => {
-    if (renderMode !== '3d' && canUseBomb(engine.currentPlayer)) {
-      selectedMode = 'bomb';
-      updateUI();
-    }
-  });
-
   checkWinBtn.addEventListener('click', async () => {
     if (inputLocked || replaying || !canActLocally()) return;
     await performManualCheck();
-  });
-
-  flipBtn.addEventListener('click', async () => {
-    if (renderMode === '3d' || inputLocked || replaying || !canActLocally()) return;
-    await performFlip();
   });
 
   undoBtn.addEventListener('click', async () => {
@@ -433,23 +415,6 @@ async function performColumnAction(col: number): Promise<void> {
   await playOutcome(outcome, before, getRenderState());
 }
 
-async function performFlip(): Promise<void> {
-  if (renderMode === '3d') return;
-  if (isOnline()) {
-    emitOnlineAction({ kind: 'flip' });
-    return;
-  }
-
-  const before = getRenderState();
-  const outcome = engine.flipGravity();
-  if (!outcome.ok) {
-    updateUI(outcome.message);
-    return;
-  }
-
-  await playOutcome(outcome, before, getRenderState());
-}
-
 async function performManualCheck(): Promise<void> {
   if (isOnline()) {
     emitOnlineAction({ kind: 'check' });
@@ -472,10 +437,6 @@ async function playOutcome(outcome: MoveOutcome, before?: RenderState, after?: R
   updateUI();
   await renderer.animateMove(outcome, before, after ?? getRenderState());
   inputLocked = false;
-
-  if (!canUseBomb(engine.currentPlayer)) {
-    selectedMode = 'drop';
-  }
 
   updateUI();
   maybeScheduleAi();
@@ -599,9 +560,6 @@ function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> {
       inputLocked = false;
     }
 
-    if (!canUseBomb(engine.currentPlayer)) {
-      selectedMode = 'drop';
-    }
     updateUI(payload.message);
   });
 
@@ -913,7 +871,6 @@ function tick(now: number): void {
   if (!replaying && !isOnline()) {
     const changed = engine.tick(delta);
     if (changed) {
-      if (!canUseBomb(engine.currentPlayer)) selectedMode = 'drop';
       updateUI();
       maybeScheduleAi();
     }
@@ -956,7 +913,6 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   turnClock.textContent = visualSettings.turnTimerEnabled ? `${Math.ceil(engine.turnRemaining)}s` : '--';
 
   dropModeBtn.classList.toggle('active', selectedMode === 'drop');
-  bombModeBtn.classList.toggle('active', selectedMode === 'bomb');
   const checkLabel = checkWinBtn.querySelector('span');
   if (checkLabel) {
     checkLabel.textContent = '查胜';
@@ -971,19 +927,6 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
     hasPendingUndo ||
     !canActLocally() ||
     status !== 'playing';
-  bombModeBtn.disabled =
-    renderMode === '3d' || settingsDirty || !canUseBomb(currentPlayer) || inputLocked || replaying || hasPendingUndo || !canActLocally();
-  bombModeBtn.title = renderMode === '3d' ? '炸弹棋子需要切换到 2D' : '炸弹棋子';
-  flipBtn.disabled =
-    renderMode === '3d' ||
-    settingsDirty ||
-    !canUseFlip(currentPlayer) ||
-    inputLocked ||
-    replaying ||
-    hasPendingUndo ||
-    !canActLocally() ||
-    status !== 'playing';
-  flipBtn.title = renderMode === '3d' ? '重力反转需要切换到 2D' : '重力反转';
   undoBtn.disabled = inputLocked || replaying || hasPendingUndo || !canRequestUndo();
   replayBtn.disabled = (!replaying && (inputLocked || settingsDirty)) || engine.replayFrames.length <= 1;
   replayBtn.title = replaying ? '停止复盘' : '复盘';
@@ -1057,7 +1000,7 @@ function renderSummary(): void {
 
 function renderMoves(): void {
   moveCount.textContent = String(engine.logEntries.length);
-  const recent = engine.logEntries.slice(-8).reverse();
+  const recent = engine.logEntries.slice().reverse();
   moveList.innerHTML = recent
     .map((entry) => {
       const marker = entry.player === 1 ? 'blue-dot' : entry.player === 2 ? 'yellow-dot' : 'neutral-dot';
@@ -1434,16 +1377,6 @@ function syncRuleLimitToForm(modeSelect: HTMLSelectElement, input: HTMLInputElem
   modeSelect.value = unlimited ? 'unlimited' : 'limited';
   input.value = String(unlimited ? 1 : clampInt(limit, 1, 9));
   input.disabled = unlimited;
-}
-
-function canUseBomb(player: Player): boolean {
-  return engine.status === 'playing' && engine.settings.bombsEnabled && hasRuleUseLeft(engine.bombsLeft[player]);
-}
-
-function canUseFlip(player: Player): boolean {
-  return (
-    engine.status === 'playing' && engine.settings.gravityFlipEnabled && hasRuleUseLeft(engine.flipsLeft[player])
-  );
 }
 
 function isAiTurn(): boolean {
