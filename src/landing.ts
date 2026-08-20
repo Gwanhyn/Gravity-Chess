@@ -236,6 +236,7 @@ class ShowcaseBoard {
   private readonly board: Array<Array<ShowcasePiece | null>>;
   private readonly active = new Set<ShowcasePiece>();
   private readonly free: ShowcasePiece[];
+  private readonly settlingPieces: ShowcasePiece[] = [];
   private readonly winRingGeometry = new THREE.TorusGeometry(0.42, 0.026, 8, 36);
   private readonly winRingMaterials: Record<Player, THREE.MeshBasicMaterial>;
   private readonly winRings: THREE.Mesh[] = [];
@@ -288,6 +289,7 @@ class ShowcaseBoard {
   }
 
   update(now: number, _delta: number): void {
+    this.updateSettlingPieces(now);
     this.updateWinHighlight(now);
     switch (this.currentPhase) {
       case 'SPAWNING': this.spawn(now); break;
@@ -300,7 +302,7 @@ class ShowcaseBoard {
           } else {
             this.currentPhase = 'WAITING';
             this.phaseStarted = now;
-            this.nextSpawnAt = now + this.randomBetween(0.52, 0.88);
+            this.nextSpawnAt = now + this.randomBetween(0.08, 0.16);
           }
         }
         break;
@@ -311,9 +313,9 @@ class ShowcaseBoard {
       case 'CLEARING': this.updateClearing(now); break;
       case 'SETTLING': this.updateSettling(now); break;
       case 'STABILIZING':
-        if (now - this.phaseStarted >= 0.34) {
+        if (now - this.phaseStarted >= 0.22) {
           this.currentPhase = 'WAITING';
-          this.nextSpawnAt = now + this.randomBetween(0.34, 0.58);
+          this.nextSpawnAt = now + this.randomBetween(0.24, 0.42);
         }
         break;
       case 'WON': this.updateVictory(now); break;
@@ -324,6 +326,7 @@ class ShowcaseBoard {
   dispose(): void {
     for (const piece of this.active) piece.mesh.visible = false;
     this.active.clear();
+    this.settlingPieces.length = 0;
     this.free.length = 0;
     this.winRingGeometry.dispose();
     this.winRingMaterials[1].dispose();
@@ -352,7 +355,7 @@ class ShowcaseBoard {
     piece.fromY = 5.45 + this.random() * 0.22;
     piece.toY = this.targetY(row);
     piece.spawnAt = now;
-    piece.duration = this.randomBetween(0.72, 1.08);
+    piece.duration = this.randomBetween(0.54, 0.82);
     piece.mesh.material = piece.player === 1 ? this.playerAMaterial : this.playerBMaterial;
     piece.mesh.position.set(this.targetX(column), piece.fromY, SHOWCASE_PIECE_Z);
     piece.mesh.scale.setScalar(1);
@@ -380,17 +383,33 @@ class ShowcaseBoard {
     const eased = gravityEase(progress);
     piece.mesh.position.y = piece.fromY + (piece.toY - piece.fromY) * eased;
     if (progress > 0.86) piece.mesh.position.y += Math.sin((progress - 0.86) / 0.14 * Math.PI) * 0.018;
-    if (progress >= 1) {
-      piece.mesh.position.y = piece.toY;
-      piece.mesh.scale.setScalar(1);
+    // Release the next drop while the current piece is finishing its short settle.
+    // The settling piece continues animating independently below.
+    if (progress >= 0.68) {
+      piece.fromY = piece.mesh.position.y;
+      piece.spawnAt = now;
+      piece.duration = 0.24;
+      this.settlingPieces.push(piece);
       this.fallingPiece = null;
       this.currentPhase = 'SETTLED';
       this.phaseStarted = now;
     }
   }
 
+  private updateSettlingPieces(now: number): void {
+    for (let index = this.settlingPieces.length - 1; index >= 0; index -= 1) {
+      const piece = this.settlingPieces[index];
+      const progress = Math.min(1, (now - piece.spawnAt) / piece.duration);
+      piece.mesh.position.y = piece.fromY + (piece.toY - piece.fromY) * gravityEase(progress);
+      if (progress >= 1) {
+        piece.mesh.position.y = piece.toY;
+        this.settlingPieces.splice(index, 1);
+      }
+    }
+  }
+
   private shouldClear(now: number): boolean {
-    if (this.runPlan) return false;
+    if (this.runPlan || this.settlingPieces.length > 0) return false;
     const bottomCount = this.board[this.rows - 1].filter(Boolean).length;
     const total = this.active.size;
     if (bottomCount < Math.ceil(this.cols * 0.7)) return false;
@@ -410,7 +429,7 @@ class ShowcaseBoard {
   }
 
   private updateClearing(now: number): void {
-    const progress = Math.min(1, (now - this.phaseStarted) / 0.45);
+    const progress = Math.min(1, (now - this.phaseStarted) / 0.3);
     for (const piece of this.board[this.rows - 1]) {
       if (!piece) continue;
       piece.mesh.position.y = this.targetY(this.rows - 1) - easeInCubic(progress) * 0.24;
@@ -457,7 +476,7 @@ class ShowcaseBoard {
   }
 
   private updateSettling(now: number): void {
-    const progress = Math.min(1, (now - this.phaseStarted) / 0.76);
+    const progress = Math.min(1, (now - this.phaseStarted) / 0.52);
     const eased = gravityEase(progress);
     for (const piece of this.active) {
       piece.mesh.position.set(this.targetX(piece.col), piece.fromY + (piece.toY - piece.fromY) * eased, SHOWCASE_PIECE_Z);
@@ -589,8 +608,8 @@ class ShowcaseBoard {
 
   private updateWinHighlight(now: number): void {
     if (this.winningLine.length === 0) return;
-    const progress = Math.min(1, (now - this.winStartedAt) / 2.15);
-    const fade = progress < 0.12 ? progress / 0.12 : progress > 0.84 ? (1 - progress) / 0.16 : 1;
+    const progress = Math.min(1, (now - this.winStartedAt) / 3.1);
+    const fade = progress < 0.12 ? progress / 0.12 : progress > 0.9 ? (1 - progress) / 0.1 : 1;
     for (let index = 0; index < this.winningLine.length; index += 1) {
       const piece = this.winningLine[index];
       const ring = this.winRings[index];
@@ -611,7 +630,7 @@ class ShowcaseBoard {
   }
 
   private updateVictory(now: number): void {
-    if (now - this.phaseStarted < 2.15) return;
+    if (now - this.phaseStarted < 3.1) return;
     this.clearWinHighlight();
     this.currentPhase = 'RESETTING';
     this.phaseStarted = now;
@@ -619,7 +638,7 @@ class ShowcaseBoard {
   }
 
   private updateResetting(now: number): void {
-    const progress = Math.min(1, (now - this.phaseStarted) / 0.48);
+    const progress = Math.min(1, (now - this.phaseStarted) / 0.34);
     const scale = Math.max(0.02, 1 - easeInCubic(progress));
     for (const piece of this.active) piece.mesh.scale.setScalar(scale);
     if (progress >= 1) this.resetShowcase(now);
@@ -632,6 +651,7 @@ class ShowcaseBoard {
       this.free.push(piece);
     }
     this.active.clear();
+    this.settlingPieces.length = 0;
     for (const row of this.board) row.fill(null);
     this.fallingPiece = null;
     this.runPlan = null;
