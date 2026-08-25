@@ -13,7 +13,7 @@ import { ACTIVE_SHOWCASE_THEME } from '../showcaseTheme';
 
 const CENTER_Y = 3.62;
 const CELL_SPACING = 1.18;
-const ACCENT = 0x74b7b3;
+const ACCENT = 0x69e6ff;
 
 interface Layout {
   width: number;
@@ -57,30 +57,30 @@ export class ThreeRenderer implements GameRenderer {
   private readonly slotRimGeometry = new THREE.TorusGeometry(0.435, 0.026, 8, 32);
   private readonly winHaloGeometry = new THREE.TorusGeometry(0.46, 0.04, 10, 40);
   private readonly boardMaterial = new THREE.MeshStandardMaterial({
-    color: 0x43545a,
-    emissive: 0x142126,
-    emissiveIntensity: 0.42,
-    metalness: 0.28,
-    roughness: 0.44
+    color: 0x1e282b,
+    emissive: 0x071115,
+    emissiveIntensity: 0.24,
+    metalness: 0.35,
+    roughness: 0.55
   });
   private readonly frameMaterial = new THREE.MeshStandardMaterial({
-    color: 0x87999d,
-    emissive: 0x161c1e,
-    emissiveIntensity: 0.12,
-    metalness: 0.5,
-    roughness: 0.3
+    color: 0x607579,
+    emissive: 0x10191c,
+    emissiveIntensity: 0.08,
+    metalness: 0.55,
+    roughness: 0.42
   });
   private readonly cellMaterial = new THREE.MeshStandardMaterial({
-    color: 0x18252b,
+    color: 0x2d3a3d,
     emissive: 0x071115,
-    emissiveIntensity: 0.44,
-    metalness: 0.28,
-    roughness: 0.5
+    emissiveIntensity: 0.3,
+    metalness: 0.3,
+    roughness: 0.58
   });
   private readonly slotRimMaterial = new THREE.MeshStandardMaterial({
-    color: 0x66757b,
-    metalness: 0.48,
-    roughness: 0.32
+    color: 0x607579,
+    metalness: 0.55,
+    roughness: 0.42
   });
   private readonly playerMaterials: Record<Player, THREE.MeshStandardMaterial> = {
     1: new THREE.MeshStandardMaterial({ color: ACTIVE_SHOWCASE_THEME.playerA, metalness: 0.18, roughness: 0.36, emissive: ACTIVE_SHOWCASE_THEME.playerAEmissive, emissiveIntensity: 0.24 }),
@@ -88,15 +88,15 @@ export class ThreeRenderer implements GameRenderer {
   };
   private readonly gravityMaterial = new THREE.MeshStandardMaterial({
     color: ACCENT,
-    emissive: 0x1d4a49,
-    emissiveIntensity: 0.5,
+    emissive: 0x164e5d,
+    emissiveIntensity: 0.38,
     metalness: 0.38,
     roughness: 0.35
   });
   private readonly topologyMaterial = new THREE.MeshStandardMaterial({
-    color: 0x548986,
-    emissive: 0x163535,
-    emissiveIntensity: 0.28,
+    color: 0x3a8ca0,
+    emissive: 0x123b4a,
+    emissiveIntensity: 0.2,
     transparent: true,
     opacity: 0.52,
     metalness: 0.32,
@@ -104,8 +104,8 @@ export class ThreeRenderer implements GameRenderer {
   });
   private readonly hoverMaterial = new THREE.MeshStandardMaterial({
     color: ACCENT,
-    emissive: 0x1a5a57,
-    emissiveIntensity: 0.35,
+    emissive: 0x164e5d,
+    emissiveIntensity: 0.24,
     transparent: true,
     opacity: 0.08,
     side: THREE.DoubleSide
@@ -169,8 +169,8 @@ export class ThreeRenderer implements GameRenderer {
     this.renderer.domElement.setAttribute('aria-label', 'Gravity Chess 3D 棋盘');
     this.mount.replaceChildren(this.renderer.domElement);
 
-    this.scene.background = new THREE.Color(0x0d161c);
-    this.scene.fog = new THREE.Fog(0x11161a, 20, 38);
+    this.scene.background = new THREE.Color(0x071016);
+    this.scene.fog = new THREE.Fog(0x0b151a, 20, 38);
     this.fillLight = new THREE.HemisphereLight(0xd6e0e1, 0x222a2c, 2.05);
     this.scene.add(this.fillLight);
 
@@ -182,13 +182,13 @@ export class ThreeRenderer implements GameRenderer {
     this.keyLight.shadow.camera.far = 40;
     this.scene.add(this.keyLight);
 
-    this.rimLight = new THREE.PointLight(0x9fc9ce, 4.8, 20, 2);
+    this.rimLight = new THREE.PointLight(0x69e6ff, 3.6, 20, 2);
     this.rimLight.position.set(7, 7, 6);
     this.scene.add(this.rimLight);
 
     this.floor = new THREE.Mesh(
       new THREE.PlaneGeometry(32, 32),
-      new THREE.MeshStandardMaterial({ color: 0x20292c, roughness: 0.82, metalness: 0.08 })
+      new THREE.MeshStandardMaterial({ color: 0x0b1114, roughness: 0.75, metalness: 0.05 })
     );
     this.floor.rotation.x = -Math.PI / 2;
     this.floor.position.y = 0;

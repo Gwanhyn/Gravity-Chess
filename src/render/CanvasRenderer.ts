@@ -261,13 +261,13 @@ export class CanvasRenderer implements GameRenderer {
   private drawBackground(scoreSkew: number): void {
     const { width, height } = this.layout;
     // Keep the playfield quiet so the board and pieces carry the color hierarchy.
-    this.ctx.fillStyle = '#0b151c';
+    this.ctx.fillStyle = '#071016';
     this.ctx.fillRect(0, 0, width, height);
 
     this.ctx.save();
-    this.ctx.globalAlpha = 0.22;
-    this.ctx.fillStyle = '#6b858a';
-    for (let i = 0; i < 18; i += 1) {
+    this.ctx.globalAlpha = 0.12;
+    this.ctx.fillStyle = '#31515c';
+    for (let i = 0; i < 12; i += 1) {
       const x = (i * 97) % width;
       const y = (i * 151) % height;
       this.ctx.beginPath();
@@ -283,16 +283,22 @@ export class CanvasRenderer implements GameRenderer {
     this.ctx.save();
     this.ctx.globalAlpha = alpha;
     this.ctx.shadowColor = 'rgba(0, 0, 0, 0.38)';
-    this.ctx.shadowBlur = offsetX === 0 && offsetY === 0 ? 24 : 10;
-    this.ctx.shadowOffsetY = offsetX === 0 && offsetY === 0 ? 12 : 4;
+    this.ctx.shadowBlur = offsetX === 0 && offsetY === 0 ? 18 : 8;
+    this.ctx.shadowOffsetY = offsetX === 0 && offsetY === 0 ? 8 : 3;
     this.roundRect(origin.x - cell * 0.1, origin.y - cell * 0.1, width + cell * 0.2, height + cell * 0.2, 18);
-    this.ctx.fillStyle = '#1a2a32';
+    this.ctx.fillStyle = '#1d282a';
     this.ctx.fill();
 
     this.ctx.shadowColor = 'transparent';
     this.roundRect(origin.x, origin.y, width, height, 14);
-    this.ctx.fillStyle = '#2b3e46';
+    const plateGradient = this.ctx.createLinearGradient(0, origin.y, 0, origin.y + height);
+    plateGradient.addColorStop(0, '#263335');
+    plateGradient.addColorStop(1, '#1d282a');
+    this.ctx.fillStyle = plateGradient;
     this.ctx.fill();
+    this.ctx.strokeStyle = 'rgba(120, 150, 150, 0.24)';
+    this.ctx.lineWidth = 1;
+    this.ctx.stroke();
     this.ctx.restore();
   }
 
@@ -315,9 +321,9 @@ export class CanvasRenderer implements GameRenderer {
     const { originX, originY, cell } = this.layout;
     this.ctx.save();
     this.roundRect(originX + this.hoverCol * cell + cell * 0.08, originY + cell * 0.08, cell * 0.84, cell * this.board.rows - cell * 0.16, 12);
-    this.ctx.fillStyle = 'rgba(139, 207, 200, 0.14)';
+    this.ctx.fillStyle = 'rgba(105, 230, 255, 0.06)';
     this.ctx.fill();
-    this.ctx.strokeStyle = 'rgba(139, 207, 200, 0.48)';
+    this.ctx.strokeStyle = 'rgba(105, 230, 255, 0.42)';
     this.ctx.lineWidth = 2;
     this.ctx.stroke();
     this.ctx.restore();
@@ -467,7 +473,7 @@ export class CanvasRenderer implements GameRenderer {
     drawSegments(winner === 1 ? ACTIVE_SHOWCASE_THEME.playerAHighlightCss : ACTIVE_SHOWCASE_THEME.playerBHighlightCss, Math.max(5, this.layout.cell * 0.085));
 
     for (const center of centers) {
-      this.ctx.fillStyle = winner === 1 ? `rgba(74, 158, 255, ${0.12 + pulse * 0.1})` : `rgba(217, 154, 50, ${0.12 + pulse * 0.1})`;
+      this.ctx.fillStyle = winner === 1 ? `rgba(77, 163, 255, ${0.12 + pulse * 0.1})` : `rgba(245, 184, 75, ${0.12 + pulse * 0.1})`;
       this.ctx.beginPath();
       this.ctx.arc(center.x, center.y, this.layout.radius * 1.2, 0, Math.PI * 2);
       this.ctx.fill();
@@ -493,15 +499,16 @@ export class CanvasRenderer implements GameRenderer {
   }
 
   private drawHole(x: number, y: number): void {
-    const gradient = this.ctx.createRadialGradient(x, y, this.layout.radius * 0.2, x, y, this.layout.radius * 1.2);
-    gradient.addColorStop(0, '#38525a');
-    gradient.addColorStop(1, '#102027');
+    const gradient = this.ctx.createRadialGradient(x, y + this.layout.radius * 0.12, this.layout.radius * 0.08, x, y + this.layout.radius * 0.12, this.layout.radius * 1.04);
+    gradient.addColorStop(0, '#071114');
+    gradient.addColorStop(0.72, '#050a0d');
+    gradient.addColorStop(1, '#050b0d');
     this.ctx.save();
     this.ctx.fillStyle = gradient;
     this.ctx.beginPath();
     this.ctx.arc(x, y, this.layout.radius * 1.03, 0, Math.PI * 2);
     this.ctx.fill();
-    this.ctx.strokeStyle = 'rgba(174, 207, 207, 0.24)';
+    this.ctx.strokeStyle = 'rgba(120, 150, 150, 0.28)';
     this.ctx.lineWidth = 2;
     this.ctx.stroke();
     this.ctx.restore();
@@ -535,8 +542,8 @@ export class CanvasRenderer implements GameRenderer {
 
     this.ctx.save();
     this.ctx.globalAlpha = alpha;
-    this.ctx.shadowColor = player === 1 ? 'rgba(74, 158, 255, 0.52)' : 'rgba(217, 154, 50, 0.46)';
-    this.ctx.shadowBlur = 10;
+    this.ctx.shadowColor = player === 1 ? 'rgba(77, 163, 255, 0.28)' : 'rgba(245, 184, 75, 0.25)';
+    this.ctx.shadowBlur = 8;
     this.ctx.fillStyle = gradient;
     this.ctx.beginPath();
     this.ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -558,7 +565,7 @@ export class CanvasRenderer implements GameRenderer {
     this.ctx.arc(x, y, radius * 0.88, 0, Math.PI * 2);
     this.ctx.fill();
     this.ctx.shadowColor = 'transparent';
-    this.ctx.strokeStyle = player === 1 ? '#4a9eff' : '#d99a32';
+    this.ctx.strokeStyle = player === 1 ? ACTIVE_SHOWCASE_THEME.playerACss : ACTIVE_SHOWCASE_THEME.playerBCss;
     this.ctx.lineWidth = 4;
     this.ctx.beginPath();
     this.ctx.arc(x, y, radius * 0.58, -0.2, Math.PI * 1.45);

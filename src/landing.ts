@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Board } from './core/Board';
+import { ShowcaseAI } from './core/ShowcaseAI';
+import type { Position } from './core/types';
 import { ACTIVE_SHOWCASE_THEME, PLAYER_A_COLOR, PLAYER_B_COLOR } from './showcaseTheme';
 import './style.css';
 
@@ -18,13 +21,6 @@ interface ShowcasePiece {
   toY: number;
   spawnAt: number;
   duration: number;
-}
-
-interface RunPlan {
-  row: number;
-  columns: number[];
-  players: Player[];
-  index: number;
 }
 
 const landing = document.querySelector<HTMLElement>('#landingView');
@@ -79,7 +75,7 @@ function mountHero(canvas: HTMLCanvasElement): void {
   canvas.dataset.heroStatus = 'initializing';
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x080d12);
+  scene.background = new THREE.Color(0x071016);
   const camera = new THREE.PerspectiveCamera(31, 1, 0.1, 100);
   camera.position.set(7.4, 2.6, 15.6);
 
@@ -93,12 +89,12 @@ function mountHero(canvas: HTMLCanvasElement): void {
   key.castShadow = true;
   key.shadow.mapSize.set(768, 768);
   scene.add(key);
-  const rim = new THREE.PointLight(0x6e9bb4, 3.4, 20, 2);
+  const rim = new THREE.PointLight(0x69e6ff, 2.8, 20, 2);
   rim.position.set(7, 5, 4);
   scene.add(rim);
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(24, 24),
-    new THREE.MeshStandardMaterial({ color: 0x0d1717, roughness: 0.9, metalness: 0.04 })
+    new THREE.MeshStandardMaterial({ color: 0x0b1114, roughness: 0.78, metalness: 0.05 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -3.7;
@@ -112,9 +108,9 @@ function mountHero(canvas: HTMLCanvasElement): void {
   const spacing = 1.06;
   const rows = 5;
   const cols = 7;
-  const boardMaterial = new THREE.MeshStandardMaterial({ color: 0x172321, metalness: 0.22, roughness: 0.54, emissive: 0x07100f, emissiveIntensity: 0.42 });
-  const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x52645f, metalness: 0.46, roughness: 0.38 });
-  const holeMaterial = new THREE.MeshStandardMaterial({ color: 0x080f0f, roughness: 0.7, metalness: 0.08 });
+  const boardMaterial = new THREE.MeshStandardMaterial({ color: 0x1e282b, metalness: 0.35, roughness: 0.55, emissive: 0x071115, emissiveIntensity: 0.24 });
+  const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x607579, metalness: 0.55, roughness: 0.42 });
+  const holeMaterial = new THREE.MeshStandardMaterial({ color: 0x050b0d, roughness: 0.8, metalness: 0.1 });
   const base = new THREE.Mesh(new THREE.BoxGeometry(boardWidth, boardHeight, 0.56), boardMaterial);
   base.castShadow = true;
   base.receiveShadow = true;
@@ -234,6 +230,8 @@ function mountHero(canvas: HTMLCanvasElement): void {
 
 class ShowcaseBoard {
   private readonly board: Array<Array<ShowcasePiece | null>>;
+  private readonly rulesBoard: Board;
+  private readonly showcaseAI: ShowcaseAI;
   private readonly active = new Set<ShowcasePiece>();
   private readonly free: ShowcasePiece[];
   private readonly settlingPieces: ShowcasePiece[] = [];
@@ -242,26 +240,23 @@ class ShowcaseBoard {
   private readonly winRings: THREE.Mesh[] = [];
   private phaseStarted = 0;
   private nextSpawnAt = 0;
-  private lastColumn = -1;
-  private recentColumns: number[] = [];
-  private columnUse = new Map<number, number>();
   private lastClearAt = 0;
   private clearThreshold = 13;
   private seed = (Date.now() ^ 0x9e3779b9) >>> 0;
   private fallingPiece: ShowcasePiece | null = null;
   private currentPhase: ShowcasePhase = 'SPAWNING';
-  private runPlan: RunPlan | null = null;
-  private runPlanDueAt = 8;
   private nextPlayer: Player = 1;
   private winningLine: ShowcasePiece[] = [];
   private winStartedAt = -Infinity;
   private lastClearedCount = 0;
+  private lastDropPosition: Position | null = null;
+  private moveCount = 0;
 
   get phase(): ShowcasePhase { return this.currentPhase; }
 
   get diagnostics(): string {
     const bottomCount = this.board[this.rows - 1].filter(Boolean).length;
-    return `${this.currentPhase}|pieces:${this.active.size}|bottom:${bottomCount}|stable:${this.isBoardStable()}|cleared:${this.lastClearedCount}`;
+    return `${this.currentPhase}|pieces:${this.active.size}|moves:${this.moveCount}|styles:${this.showcaseAI.getLevel(1)}/${this.showcaseAI.getLevel(2)}|bottom:${bottomCount}|stable:${this.isBoardStable()}|cleared:${this.lastClearedCount}`;
   }
 
   constructor(
@@ -274,6 +269,17 @@ class ShowcaseBoard {
     private readonly winGroup: THREE.Group
   ) {
     this.board = Array.from({ length: rows }, () => Array<ShowcasePiece | null>(cols).fill(null));
+    this.rulesBoard = new Board({
+      rows,
+      cols,
+      winLength: 4,
+      wrapHorizontal: true,
+      wrapVertical: true,
+      obstaclesEnabled: false,
+      obstacleCount: 0
+    });
+    this.showcaseAI = new ShowcaseAI({ gravity: 'down' });
+    this.showcaseAI.assignRandomLevels(() => this.random());
     this.free = [...pool];
     this.winRingMaterials = {
       1: new THREE.MeshBasicMaterial({ color: ACTIVE_SHOWCASE_THEME.playerAHighlight, transparent: true, opacity: 0, depthTest: false }),
@@ -335,21 +341,21 @@ class ShowcaseBoard {
 
   private spawn(now: number): void {
     if (this.currentPhase !== 'SPAWNING' || this.free.length === 0) return;
-    const plannedDrop = this.takePlannedDrop();
-    const column = plannedDrop?.col ?? this.chooseColumn();
+    const column = this.showcaseAI.chooseMove(this.rulesBoard, this.nextPlayer, () => this.random());
     if (column === null) {
       this.beginClearing(now);
       return;
     }
-    const row = this.findDropRow(column);
-    if (row === null) {
+    const position = this.rulesBoard.dropPiece(column, this.nextPlayer, 'down');
+    if (!position) {
       this.beginClearing(now);
       return;
     }
+    const row = position.row;
 
     const piece = this.free.pop() as ShowcasePiece;
-    piece.player = plannedDrop?.player ?? this.nextPlayer;
-    if (!plannedDrop) this.nextPlayer = this.nextPlayer === 1 ? 2 : 1;
+    piece.player = this.nextPlayer;
+    this.nextPlayer = this.nextPlayer === 1 ? 2 : 1;
     piece.row = row;
     piece.col = column;
     piece.fromY = 5.45 + this.random() * 0.22;
@@ -364,13 +370,11 @@ class ShowcaseBoard {
     // The logical grid reserves the destination before the visual fall begins.
     this.board[row][column] = piece;
     this.active.add(piece);
+    this.lastDropPosition = position;
+    this.moveCount += 1;
     this.fallingPiece = piece;
     this.currentPhase = 'FALLING';
     this.phaseStarted = now;
-    this.lastColumn = column;
-    this.recentColumns.push(column);
-    if (this.recentColumns.length > 4) this.recentColumns.shift();
-    this.columnUse.set(column, (this.columnUse.get(column) ?? 0) + 1);
   }
 
   private updateFalling(now: number): void {
@@ -409,7 +413,7 @@ class ShowcaseBoard {
   }
 
   private shouldClear(now: number): boolean {
-    if (this.runPlan || this.settlingPieces.length > 0) return false;
+    if (this.settlingPieces.length > 0) return false;
     const bottomCount = this.board[this.rows - 1].filter(Boolean).length;
     const total = this.active.size;
     if (bottomCount < Math.ceil(this.cols * 0.7)) return false;
@@ -472,7 +476,14 @@ class ShowcaseBoard {
     this.phaseStarted = now;
     this.lastClearAt = now;
     this.clearThreshold = 13 + Math.floor(this.random() * 3);
-    this.runPlanDueAt = this.active.size + 4;
+    const matrix = this.rulesBoard.cloneMatrix();
+    matrix[this.rows - 1].fill(0);
+    for (let col = 0; col < this.cols; col += 1) {
+      const remaining = matrix.slice(0, this.rows - 1).map((row) => row[col]).filter((cell) => cell === 1 || cell === 2);
+      for (let row = 0; row < this.rows; row += 1) matrix[row][col] = 0;
+      for (let index = 0; index < remaining.length; index += 1) matrix[this.rows - 1 - index][col] = remaining[remaining.length - 1 - index];
+    }
+    this.rulesBoard.setMatrix(matrix);
   }
 
   private updateSettling(now: number): void {
@@ -489,94 +500,6 @@ class ShowcaseBoard {
     }
   }
 
-  private takePlannedDrop(): { col: number; player: Player } | null {
-    if (!this.runPlan && this.active.size >= this.runPlanDueAt) this.prepareRunPlan();
-    if (!this.runPlan) return null;
-    const plan = this.runPlan;
-    while (plan.index < plan.columns.length) {
-      const col = plan.columns[plan.index];
-      const plannedPlayer = plan.players[plan.index];
-      const targetPlayer = plan.players[0];
-      const row = this.findDropRow(col);
-      if (row === null || (plannedPlayer === targetPlayer && row !== plan.row)) {
-        this.runPlan = null;
-        return null;
-      }
-      plan.index += 1;
-      if (plan.index >= plan.columns.length) {
-        this.runPlan = null;
-        this.runPlanDueAt = this.active.size + 7 + Math.floor(this.random() * 3);
-      }
-      return { col, player: plannedPlayer };
-    }
-    this.runPlan = null;
-    return null;
-  }
-
-  private prepareRunPlan(): void {
-    const candidates: Array<{ row: number; columns: number[] }> = [];
-    for (let row = this.rows - 1; row >= 0; row -= 1) {
-      for (let start = 0; start < this.cols; start += 1) {
-        const columns = [0, 1, 2, 3].map((offset) => (start + offset) % this.cols);
-        if (columns.every((col) => this.findDropRow(col) === row)) candidates.push({ row, columns });
-      }
-    }
-    if (candidates.length === 0) {
-      this.runPlanDueAt = this.active.size + 4;
-      return;
-    }
-    const candidate = candidates[Math.floor(this.random() * candidates.length)];
-    const targetPlayer = this.nextPlayer;
-    const fillerPlayer = targetPlayer === 1 ? 2 : 1;
-    const targetColumns = new Set(candidate.columns);
-    const fillerSlots = Array.from({ length: this.cols }, (_, col) => col)
-      .filter((col) => !targetColumns.has(col))
-      .flatMap((col) => {
-        const row = this.findDropRow(col);
-        return row === null ? [] : Array.from({ length: row + 1 }, () => col);
-      });
-    if (fillerSlots.length < 4) {
-      this.runPlanDueAt = this.active.size + 4;
-      return;
-    }
-    const fillerColumns = Array.from({ length: 4 }, () => {
-      const slotIndex = Math.floor(this.random() * fillerSlots.length);
-      return fillerSlots.splice(slotIndex, 1)[0];
-    });
-    this.runPlan = {
-      row: candidate.row,
-      columns: candidate.columns.flatMap((col, index) => [col, fillerColumns[index]]),
-      players: candidate.columns.flatMap(() => [targetPlayer, fillerPlayer]),
-      index: 0
-    };
-  }
-
-  private chooseColumn(): number | null {
-    const legal: number[] = [];
-    const weights: number[] = [];
-    for (let col = 0; col < this.cols; col += 1) {
-      const row = this.findDropRow(col);
-      if (row === null) continue;
-      const height = this.rows - 1 - row;
-      const recentCount = this.recentColumns.filter((entry) => entry === col).length;
-      const centerDistance = Math.abs(col - (this.cols - 1) / 2);
-      let weight = 1 + (this.rows - height) * 0.54 + Math.max(0, centerDistance - 1) * 0.12;
-      weight *= Math.pow(0.3, recentCount);
-      if (col === this.lastColumn) weight *= 0.28;
-      weight /= 1 + (this.columnUse.get(col) ?? 0) * 0.08;
-      legal.push(col);
-      weights.push(Math.max(0.04, weight));
-    }
-    if (legal.length === 0) return null;
-    const total = weights.reduce((sum, value) => sum + value, 0);
-    let pick = this.random() * total;
-    for (let index = 0; index < legal.length; index += 1) {
-      pick -= weights[index];
-      if (pick <= 0) return legal[index];
-    }
-    return legal[legal.length - 1];
-  }
-
   private beginVictory(now: number, line: ShowcasePiece[]): void {
     this.winningLine = line;
     this.winStartedAt = now;
@@ -585,25 +508,14 @@ class ShowcaseBoard {
   }
 
   private findFourInARow(): ShowcasePiece[] | null {
-    const directions = [[0, 1], [1, 0], [1, 1], [1, -1]] as const;
-    for (let row = 0; row < this.rows; row += 1) {
-      for (let col = 0; col < this.cols; col += 1) {
-        const first = this.board[row][col];
-        if (!first) continue;
-        for (const [rowStep, colStep] of directions) {
-          const line = [first];
-          for (let index = 1; index < 4; index += 1) {
-            const candidateRow = (row + rowStep * index + this.rows) % this.rows;
-            const candidateCol = (col + colStep * index + this.cols) % this.cols;
-            const candidate = this.board[candidateRow][candidateCol];
-            if (!candidate || candidate.player !== first.player) break;
-            line.push(candidate);
-          }
-          if (line.length === 4) return line;
-        }
-      }
-    }
-    return null;
+    const win = this.lastDropPosition
+      ? this.rulesBoard.checkWin(this.lastDropPosition.row, this.lastDropPosition.col)
+      : this.rulesBoard.scanForWinner();
+    if (!win) return null;
+    const line = win.line
+      .map((cell) => this.board[cell.row]?.[cell.col] ?? null)
+      .filter((piece): piece is ShowcasePiece => Boolean(piece));
+    return line.length === win.line.length ? line : null;
   }
 
   private updateWinHighlight(now: number): void {
@@ -654,13 +566,12 @@ class ShowcaseBoard {
     this.settlingPieces.length = 0;
     for (const row of this.board) row.fill(null);
     this.fallingPiece = null;
-    this.runPlan = null;
-    this.runPlanDueAt = 8;
     this.nextPlayer = 1;
-    this.recentColumns = [];
-    this.columnUse.clear();
-    this.lastColumn = -1;
     this.lastClearedCount = 0;
+    this.lastDropPosition = null;
+    this.moveCount = 0;
+    this.showcaseAI.assignRandomLevels(() => this.random());
+    this.rulesBoard.setMatrix(Array.from({ length: this.rows }, () => Array(this.cols).fill(0)));
     this.clearThreshold = 13;
     this.lastClearAt = now;
     this.currentPhase = 'SPAWNING';
@@ -675,11 +586,6 @@ class ShowcaseBoard {
       }
     }
     return true;
-  }
-
-  private findDropRow(col: number): number | null {
-    for (let row = this.rows - 1; row >= 0; row -= 1) if (!this.board[row][col]) return row;
-    return null;
   }
 
   private targetX(col: number): number { return (col - (this.cols - 1) / 2) * this.spacing; }

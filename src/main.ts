@@ -447,6 +447,12 @@ function maybeScheduleAi(): void {
 
   aiPending = true;
   window.setTimeout(async () => {
+    if (!engine.settings.autoWinCheckEnabled && engine.board.scanPlayerWinner(engine.currentPlayer)) {
+      aiPending = false;
+      await performManualCheck();
+      return;
+    }
+
     const col = engine.getAiColumn();
     aiPending = false;
     if (col === null || engine.status !== 'playing') {
@@ -930,6 +936,8 @@ function updateUI(message?: string, replayFrame?: ReplayFrame): void {
   undoBtn.disabled = inputLocked || replaying || hasPendingUndo || !canRequestUndo();
   replayBtn.disabled = (!replaying && (inputLocked || settingsDirty)) || engine.replayFrames.length <= 1;
   replayBtn.title = replaying ? '停止复盘' : '复盘';
+  replayBtn.dataset.tooltip = replaying ? '停止复盘' : '复盘';
+  replayBtn.setAttribute('aria-label', replaying ? '停止复盘' : '复盘');
   replayBtn.innerHTML = `<i data-lucide="${replaying ? 'x' : 'play'}"></i>`;
   dropModeBtn.disabled =
     settingsDirty || inputLocked || replaying || hasPendingUndo || !canActLocally() || status !== 'playing';

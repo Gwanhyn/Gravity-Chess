@@ -16,18 +16,18 @@ export interface PieceTheme {
 
 export const BLUE_YELLOW_THEME: PieceTheme = {
   name: 'blue-yellow',
-  playerA: 0x4a9eff,
-  playerAEmissive: 0x071b35,
-  playerAHighlight: 0xc7e2ff,
-  playerAHighlightCss: '#c7e2ff',
-  playerB: 0xd99a32,
-  playerBEmissive: 0x301b05,
-  playerBHighlight: 0xffe0a5,
-  playerBHighlightCss: '#ffe0a5',
-  playerACss: '#4a9eff',
-  playerADarkCss: '#1d5da5',
-  playerBCss: '#d99a32',
-  playerBDarkCss: '#8b5b17'
+  playerA: 0x4da3ff,
+  playerAEmissive: 0x0b3a66,
+  playerAHighlight: 0x9dd8ff,
+  playerAHighlightCss: '#9dd8ff',
+  playerB: 0xf5b84b,
+  playerBEmissive: 0x5a3300,
+  playerBHighlight: 0xffe29a,
+  playerBHighlightCss: '#ffe29a',
+  playerACss: '#4da3ff',
+  playerADarkCss: '#1262b3',
+  playerBCss: '#f5b84b',
+  playerBDarkCss: '#a86810'
 };
 
 export const ACTIVE_SHOWCASE_THEME = BLUE_YELLOW_THEME;
